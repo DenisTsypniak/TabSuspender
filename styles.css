@@ -91,6 +91,11 @@ body {
 .popup-wrapper {
     align-items: center; /* Центруємо картку вертикально в popup */
 }
+/* Для suspend body, центруюємо картку по вертикалі */
+/* Додано новий клас centered-wrapper для цього */
+.centered-wrapper {
+    align-items: center; /* Центруємо картку вертикально */
+}
 
 
 @keyframes fadeIn {
@@ -110,8 +115,8 @@ body.dark {
 
 /* Стилі обгорток для центрування та відступів */
 .options-wrapper,
-.popup-wrapper, /* Застосовуємо align-items: center тільки тут */
-.suspend-wrapper,
+.popup-wrapper,
+.suspend-wrapper, /* Призупинені сторінки тепер теж використовують centered-wrapper */
 .debug-wrapper {
   display: flex;
   justify-content: center;
@@ -121,8 +126,8 @@ body.dark {
   min-height: 100vh; /* Забезпечуємо, що обгортка займає всю висоту */
   overflow-y: auto; /* Дозволяємо прокрутку, якщо контент виходить за межі */
 }
-/* Вирівнювання по верхньому краю для не-popup обгорток */
-.options-wrapper, .suspend-wrapper, .debug-wrapper {
+/* Вирівнювання по верхньому краю для не-popup обгорток, якщо не використовується centered-wrapper */
+.options-wrapper, .debug-wrapper {
     align-items: flex-start;
 }
 
@@ -136,8 +141,8 @@ body.dark {
   padding: 25px; /* Послідовні відступи */
   width: 100%;
   animation: fadeIn 0.5s ease-in;
-  position: relative;
-  z-index: 1;
+  position: relative; /* Позиціонуємо відносно, щоб z-index працював */
+  z-index: 1; /* Забезпечуємо, що картка над іншими елементами в контексті позиціонування */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -152,7 +157,7 @@ body.dark .card {
 /* Максимальна ширина для різних типів карток */
 .popup-card { max-width: 350px; } /* Збільшено ширину для popup */
 .options-card { max-width: 650px; }
-.suspend-card { max-width: 400px; }
+.suspend-card { max-width: 400px; } /* Макс ширина для картки призупинення */
 .debug-card { max-width: 900px; } /* Збільшено ширину для адмін-панелі */
 
 /* Іконка теми (або загальна іконка картки) */
@@ -180,6 +185,17 @@ body.dark .card h1 {
 }
 
 /* ==== Стилі сторінки призупинення ==== */
+/* Контейнер, що огортає картку та скріншот для позиціонування та ховеру */
+.suspend-container {
+    position: relative; /* Для абсолютного позиціонування скріншоту всередині */
+    display: flex;
+    flex-direction: column; /* Картка над скріншотом в розмітці */
+    align-items: center; /* Центруємо вміст по горизонталі */
+    width: 100%;
+    max-width: 400px; /* Обмежуємо ширину контейнера до ширини картки */
+}
+
+
 .suspend-card .suspend-header-block { /* Container for icon and title */
     display: flex; /* Use flexbox for alignment */
     align-items: center; /* Vertically center items */
@@ -188,12 +204,8 @@ body.dark .card h1 {
     width: 100%;
     padding: 0 10px;
     box-sizing: border-box;
-    /* text-align: center; /* Center content if it wraps - це не потрібно, flex center робить це */
+    word-break: break-word; /* Allow text to break */
 }
-
-/* Container to group the icon and title */
-/* Цей клас було видалено з HTML, тому цей блок CSS теж не потрібен */
-/* .suspend-card .title-group { ... } */
 
 /* Style for the suspended tab title text element */
 .suspend-card .suspended-title {
@@ -202,14 +214,10 @@ body.dark .card h1 {
    color: var(--text-light);
    margin: 0; /* Remove margin */
    margin-left: 10px; /* Space between icon and title */
-   /* ### ЗМІНЕНО: Видалено flex-grow, flex-shrink, text-align ### */
-   /* Allow title to take up available space but shrink if needed */
-   /* flex-grow: 1; */
-   /* flex-shrink: 1; */
-   /* text-align: left; /* Align text to the left within its container */
-   word-break: break-word;
-   /* Optional: Ensure title doesn't overflow by limiting width */
-   /* max-width: calc(100% - 44px); /* Adjust based on icon size + margin */
+   word-break: break-word; /* Ensure text wrapping for long titles */
+   flex-grow: 1; /* Allow title to take up space */
+   flex-shrink: 1; /* Allow title to shrink */
+   text-align: left; /* Align text to the left */
 }
 body.dark .suspend-card .suspended-title {
   color: var(--text-dark);
@@ -222,6 +230,72 @@ body.dark .suspend-card .suspended-title {
      display: block;
      flex-shrink: 0; /* Prevent icon from shrinking */
 }
+
+/* Контейнер для скріншоту */
+.screenshot-container {
+    position: absolute; /* Розміщуємо абсолютно над карткою */
+    top: 0;
+    left: 0;
+    width: 100%; /* Займає всю ширину suspend-container */
+    height: 100%; /* Займає всю висоту suspend-container */
+    background-color: rgba(0, 0, 0, 0.8); /* Напівпрозорий чорний фон */
+    border-radius: 12px; /* Успадковуємо радіус картки */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0; /* За замовчуванням приховано */
+    pointer-events: none; /* Не перехоплює кліки та ховер на собі */
+    transition: opacity 0.3s ease-in-out; /* Плавна поява */
+    z-index: 2; /* Розміщуємо над карткою */
+    box-sizing: border-box;
+    padding: 20px; /* Внутрішні відступи для скріншоту */
+}
+
+/* Показуємо скріншотний контейнер при наведенні на основний контейнер */
+.suspend-container:hover .screenshot-container {
+    opacity: 1; /* Робимо видимим */
+    pointer-events: auto; /* Дозволяємо взаємодію (хоча тут тільки показ) */
+}
+
+/* Стилі для самого скріншоту (зображення) */
+.screenshot-container img {
+    display: block; /* Переконайтеся, що img поводиться як блок */
+    max-width: 100%; /* Не більше ширини контейнера */
+    max-height: 100%; /* Не більше висоти контейнера */
+    width: auto; /* Зберігаємо пропорції */
+    height: auto; /* Зберігаємо пропорції */
+    object-fit: contain; /* Зберігаємо пропорції, вміщуючи в контейнер */
+    border-radius: 8px; /* Невелике заокруглення кутів скріншоту */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); /* Тінь для скріншоту */
+}
+
+/* Стилі для повідомлення про відсутність скріншоту */
+.screenshot-container .screenshot-message {
+    color: rgba(255, 255, 255, 0.8); /* Світлий напівпрозорий текст */
+    font-size: 1rem;
+    font-style: italic;
+    text-align: center;
+    padding: 10px;
+    display: none; /* За замовчуванням приховано, показується JS */
+}
+
+/* Якщо скріншоти вимкнено в налаштуваннях, приховуємо весь контейнер скріншотів */
+/* Або краще: JS додасть клас на suspend-container, і CSS приховає screenshot-container */
+.suspend-container.screenshots-disabled .screenshot-container {
+    display: none; /* Повністю приховуємо контейнер, якщо скріншоти вимкнено */
+}
+
+/* Приховати іконку теми на сторінці призупинення, оскільки вона тепер тільки в options */
+/* .suspend-card .icon { display: none; } */ /* Залишимо іконку, але вона тепер тільки 🌙 / 🌞 */
+
+/* Кнопка відновлення всередині картки */
+.suspend-card .restore-button {
+    margin-top: 1.5rem; /* Додаємо простір над кнопкою відновлення */
+    width: auto; /* Ширина за вмістом + padding */
+    padding: 10px 25px; /* Збільшені відступи */
+}
+
+
 /* ==== Кінець стилів сторінки призупинення ==== */
 
 
@@ -292,7 +366,7 @@ body.dark .btn.red:hover { background-color: var(--button-red-hover-dark); box-s
 
 
 /* Конкретні кнопки */
-.restore-button { margin-top: 1.5rem; } /* Додаємо простір над кнопкою відновлення */
+/* .restore-button { margin-top: 1.5rem; } /* Додаємо простір над кнопкою відновлення - вже в suspend-card */
 
 
 /* Група кнопок для Popup */
@@ -417,7 +491,7 @@ label {
   display: block; /* Забезпечуємо, що мітка займає всю ширину */
 }
 
-/* Стилі для елементів з чекбоксами */
+/* Стилі для елементів з чекбосами */
 .settings-item.checkbox-item {
     flex-direction: row; /* Розташовуємо мітку та чекбокс в рядок */
     align-items: center;
@@ -585,6 +659,14 @@ body.dark .language-option {
     border-right: none; /* Видаляємо межу в останнього елемента */
 }
 
+/* Ховер ефект */
+.language-option:not(.active):hover {
+    background-color: rgba(0,0,0,0.05); /* Легкий фон при ховері */
+}
+body.dark .language-option:not(.active):hover {
+     background-color: rgba(255,255,255,0.05);
+}
+
 .language-option.active {
     /* Стилі активної опції */
     background-color: var(--button-blue-light); /* Колір активного фону */
@@ -594,14 +676,6 @@ body.dark .language-option {
 body.dark .language-option.active {
     background-color: var(--button-blue-dark);
     color: white;
-}
-
-/* Ховер ефект */
-.language-option:not(.active):hover {
-    background-color: rgba(0,0,0,0.05); /* Легкий фон при ховері */
-}
-body.dark .language-option:not(.active):hover {
-     background-color: rgba(255,255,255,0.05);
 }
 
 /* ==== Кінець стилів перемикача мови ==== */
@@ -817,8 +891,8 @@ body.dark .debug-card tr:hover td {
     object-fit: contain; /* Зберігаємо пропорції */
 }
 
-
-/* Місце для майбутньої реалізації скріншота */
+/* Старий placeholder скріншоту - видаляємо */
+/*
 #futureScreenshotPlaceholder {
   width: 100%;
   min-height: 150px;
@@ -833,14 +907,15 @@ body.dark .debug-card tr:hover td {
   box-sizing: border-box;
   background-color: rgba(0,0,0,0.02);
   font-size: 0.9rem;
-  flex-shrink: 0; /* Prevent shrinking in flex layout */
+  flex-shrink: 0;
 }
 body.dark #futureScreenshotPlaceholder {
     border-color: var(--border-dark);
     background-color: rgba(255,255,255,0.05);
     color: #aaa;
 }
-#futureScreenshotPlaceholder:empty:before { /* Add text only if the element is empty */
+#futureScreenshotPlaceholder:empty:before {
     content: "Місце для майбутнього скріншота";
     display: block;
 }
+*/

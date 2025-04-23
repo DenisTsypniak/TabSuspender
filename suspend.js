@@ -3,7 +3,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     // applyTheme та applyLanguage знаходяться в utils.js, який завантажується першим.
-  
+
      // --- Функція для надсилання повідомлення з повторними спробами ---
     // Ця допоміжна функція локальна для UI-скриптів, що спілкуються з фоновим service worker
     function sendMessageWithRetry(message, callback, retries = 5, delay = 100) {
@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
              if (callback) callback(null, new Error("chrome.runtime недоступний"));
             return;
         }
-  
+
         chrome.runtime.sendMessage(message, (response) => {
             // Перевіряємо chrome.runtime.lastError на наявність проблем під час надсилання/отримання повідомлення
             if (chrome.runtime.lastError) {
@@ -37,14 +37,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     // --- Кінець функції sendMessageWithRetry ---
-  
-  
-    // Load settings for theme and language
-    chrome.storage.sync.get(['language', 'theme'], (result) => {
+
+
+    // Отримуємо посилання на елементи для скріншоту та контейнер
+    const suspendContainer = document.querySelector('.suspend-container'); // Новий контейнер
+    const screenshotImg = document.getElementById('screenshotImg'); // Елемент для зображення скріншоту
+    const screenshotUnavailable = document.getElementById('screenshotUnavailable'); // Елемент для повідомлення
+
+    // Перевіряємо наявність ключових елементів перед продовженням
+    if (!suspendContainer || !screenshotImg || !screenshotUnavailable) {
+         console.error("Suspend script: Не знайдено необхідні елементи DOM для скріншоту.");
+         // Можемо приховати батьківський контейнер, якщо він існує
+         if (suspendContainer) {
+              suspendContainer.style.display = 'none'; // Приховуємо весь блок скріншоту, якщо DOM не повний
+         }
+         // Все ще завантажуємо основний UI (без скріншоту)
+          loadMainUI();
+         return; // Зупиняємо виконання, якщо DOM не повний
+    }
+
+    // Приховуємо елементи скріншоту за замовчуванням
+    screenshotImg.style.display = 'none';
+    screenshotUnavailable.style.display = 'none';
+
+
+    // Load settings for theme, language, and new screenshot option
+    chrome.storage.sync.get(['language', 'theme', 'enableScreenshots'], (result) => {
       // Apply language first to load texts for i18n attributes
       const currentLang = result.language || 'uk';
       window.applyLanguage(currentLang); // Use the global applyLanguage
-  
+
       // Then apply theme
       let theme = result.theme;
       if (!theme) {
@@ -52,129 +74,154 @@ document.addEventListener('DOMContentLoaded', () => {
         theme = prefersDark ? 'dark' : 'light';
       }
       window.applyTheme(theme); // Use the global applyTheme
-  
-      // Make body visible after theme is applied
+
+      // Apply screenshot setting class to the container
+      const enableScreenshots = result.enableScreenshots !== undefined ? result.enableScreenshots : true; // Default to true
+      if (!enableScreenshots) {
+           suspendContainer.classList.add('screenshots-disabled');
+           // Update the message placeholder if screenshots are disabled
+            const t = window.i18nTexts || {};
+            screenshotUnavailable.textContent = t.screenshotDisabledSetting || 'Screenshots disabled in settings';
+            screenshotUnavailable.style.display = 'flex'; // Show the message
+            console.log("Suspend script: Screenshots are disabled in settings.");
+      } else {
+           suspendContainer.classList.remove('screenshots-disabled');
+           // If enabled, attempt to load the screenshot
+           loadScreenshot(); // Call the function to load the screenshot
+      }
+
+      // Make body visible after theme and initial settings class are applied
       document.documentElement.style.visibility = 'visible';
+
+      // Завантажуємо основний UI (фавікон, заголовок, кнопку)
+      loadMainUI();
     });
-  
+
+
     const params = new URLSearchParams(window.location.search);
     const url = params.get('url'); // Original tab URL
     const tabTitle = params.get('title'); // Original tab title
     const tabId = params.get('tabId'); // Original tab ID (як рядок)
     const favIconUrl = params.get('favIconUrl'); // Favicon URL
-  
+
     // Перетворюємо tabId на число, якщо він існує
     const numericTabId = tabId ? parseInt(tabId, 10) : chrome.tabs.TAB_ID_NONE;
-  
-  
+
+
     const tabFaviconElement = document.getElementById('tabFavicon');
     const suspendedTabTitleElement = document.getElementById('suspendedTabTitle');
     const restoreButton = document.getElementById('restoreButton');
-    const screenshotPlaceholder = document.getElementById('futureScreenshotPlaceholder'); // Елемент-placeholder
-  
-  
-    // --- Логіка відображення скріншоту ---
-    if (screenshotPlaceholder && numericTabId !== chrome.tabs.TAB_ID_NONE) {
-         // Показуємо placeholder або індикатор завантаження
-         screenshotPlaceholder.textContent = window.i18nTexts.debugStatus || 'Updating data...'; // Можна використати статус завантаження
-         screenshotPlaceholder.style.display = 'flex'; // Робимо placeholder видимим (якщо він був прихований)
-  
+
+
+    // --- Функція для завантаження та відображення скріншоту ---
+    function loadScreenshot() {
+         // Перевіряємо, чи є дійсний tabId та елементи для скріншоту (повторно на випадок, якщо loadScreenshot викликається окремо)
+         if (numericTabId === chrome.tabs.TAB_ID_NONE || !screenshotImg || !screenshotUnavailable) {
+             console.warn("Suspend script: Tab ID is invalid or screenshot elements not found. Cannot load screenshot.");
+              if (screenshotUnavailable) { // Якщо елемент повідомлення існує, показуємо повідомлення
+                   const t = window.i18nTexts || {};
+                   screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
+                   screenshotUnavailable.style.display = 'flex'; // Show message
+              }
+             return;
+         }
+
          // Запитуємо скріншот у фонового скрипта
          sendMessageWithRetry({ action: 'getScreenshot', tabId: numericTabId }, (response, error) => {
+              const t = window.i18nTexts || {}; // Оновлюємо тексти
+
               if (error || !response || !response.success) {
                    console.error(`Suspend script: Помилка отримання скріншоту для вкладки ${numericTabId}:`, error || response?.error || "Невідома помилка");
-                   // Приховуємо placeholder і, можливо, показуємо повідомлення про помилку або "скріншот недоступний"
-                   screenshotPlaceholder.style.display = 'flex'; // Залишаємо видимим для повідомлення
-                   screenshotPlaceholder.textContent = window.i18nTexts.debugError || 'Error: Failed to retrieve data'; // Використовуємо текст помилки
-                   screenshotPlaceholder.style.color = 'var(--warning-bg, red)'; // Червоний текст помилки
+                   // Показуємо повідомлення про помилку
+                   if (screenshotUnavailable) {
+                        screenshotUnavailable.textContent = t.screenshotFetchError || 'Error loading screenshot'; // Використовуємо текст помилки
+                        screenshotUnavailable.style.display = 'flex'; // Show message
+                   }
+                   screenshotImg.style.display = 'none'; // Приховуємо img
               } else {
                    const screenshotUrl = response.screenshotUrl;
                    if (screenshotUrl) {
-                        console.log(`Suspend script: Скріншот отримано для вкладки ${numericTabId}. Відображення...`);
-                        // Приховуємо placeholder
-                        screenshotPlaceholder.style.display = 'none';
-  
-                        // Створюємо або знаходимо елемент <img> для скріншоту
-                        let screenshotImg = document.getElementById('screenshotImg');
-                        if (!screenshotImg) {
-                             screenshotImg = document.createElement('img');
-                             screenshotImg.id = 'screenshotImg';
-                             screenshotImg.alt = 'Screenshot of suspended tab';
-                             screenshotImg.style.width = '100%'; // Стилі для коректного відображення
-                             screenshotImg.style.height = 'auto';
-                             screenshotImg.style.display = 'block';
-                             screenshotImg.style.borderRadius = '8px'; // Невелике заокруглення кутів
-                             screenshotImg.style.marginTop = '1.5rem'; // Відступ зверху
-                             screenshotImg.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'; // Легка тінь
-                             // Вставляємо <img> перед кнопкою відновлення
-                             restoreButton?.parentElement?.insertBefore(screenshotImg, restoreButton);
-                        }
-  
+                        console.log(`Suspend script: Скріншот отримано для вкладки ${numericTabId}.`);
                         // Встановлюємо src скріншоту
                         screenshotImg.src = screenshotUrl;
-  
+                         screenshotImg.style.display = 'block'; // Робимо img видимим
+
+                         screenshotImg.onload = () => {
+                              console.log(`Suspend script: Скріншот для ${numericTabId} успішно завантажено.`);
+                             screenshotUnavailable.style.display = 'none'; // Ховаємо повідомлення, якщо було
+                              // CSS тепер керує початковою прозорістю та появою при ховері
+                         };
+
                          screenshotImg.onerror = () => {
                              console.warn(`Suspend script: Помилка завантаження скріншоту Data URL для ${numericTabId}.`);
-                              // Якщо скріншот не завантажився, приховуємо <img> і показуємо placeholder з повідомленням
+                              // Якщо скріншот не завантажився, приховуємо <img> і показуємо повідомлення
                              screenshotImg.style.display = 'none';
-                             screenshotPlaceholder.style.display = 'flex';
-                             screenshotPlaceholder.textContent = window.i18nTexts.noTabsFound || 'Screenshot unavailable'; // Можна використати інший текст
-                             screenshotPlaceholder.style.color = ''; // Скидаємо колір помилки
+                             if (screenshotUnavailable) {
+                                  screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
+                                  screenshotUnavailable.style.display = 'flex'; // Show message
+                             }
                          };
-  
+
                    } else {
                         console.log(`Suspend script: Скріншот відсутній для вкладки ${numericTabId}.`);
-                         // Якщо скріншот відсутній, показуємо placeholder з відповідним повідомленням
-                         screenshotPlaceholder.style.display = 'flex'; // Залишаємо видимим
-                         screenshotPlaceholder.textContent = window.i18nTexts.noTabsFound || 'Screenshot unavailable'; // Можна використати інший текст
-                         screenshotPlaceholder.style.color = ''; // Скидаємо колір помилки
+                         // Якщо скріншот відсутній, показуємо відповідне повідомлення
+                         if (screenshotUnavailable) {
+                             screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
+                             screenshotUnavailable.style.display = 'flex'; // Show message
+                         }
+                        screenshotImg.style.display = 'none'; // Приховуємо img
                    }
               }
          });
-    } else if (screenshotPlaceholder) {
-        // Якщо tabId відсутній або недійсний, просто приховуємо placeholder
-         screenshotPlaceholder.style.display = 'none';
-         console.warn("Suspend script: Tab ID відсутній або недійсний. Неможливо завантажити скріншот.");
     }
-    // --- Кінець логіки відображення скріншоту ---
-  
-  
-    // Load and display the favicon
-    if (tabFaviconElement && favIconUrl) { // Check if element exists
-       // Decode URL and set src for the <img> element
-        const decodedFavIconUrl = decodeURIComponent(favIconUrl);
-        tabFaviconElement.src = decodedFavIconUrl;
-        tabFaviconElement.style.display = 'block'; // Make icon visible
-         tabFaviconElement.onerror = () => {
-             // If the icon fails to load, hide the <img> element
-             tabFaviconElement.style.display = 'none';
-             console.warn("Error loading favicon:", decodedFavIconUrl);
-         };
-    } else if (tabFaviconElement) { // Hide if element exists but no URL
-       // If favIconUrl is not provided or empty, hide the <img> element
-       tabFaviconElement.style.display = 'none';
-        console.log("Favicon URL not provided for suspended tab.");
-    }
-  
-    // Set the original tab title
-    if (suspendedTabTitleElement) { // Check if element exists
-         const t = window.i18nTexts || {}; // Access global texts after applyLanguage has run
-  
-        if (tabTitle) {
-            // Use global escapeHTML for safety
-            suspendedTabTitleElement.textContent = window.escapeHTML(decodeURIComponent(tabTitle));
-        } else {
-            // Use localized default title if original is missing
-            suspendedTabTitleElement.textContent = t.suspendTitle || 'Tab Suspended'; // Use localized text from global object
+
+    // --- Функція для завантаження та відображення основного UI (не скріншоту) ---
+    function loadMainUI() {
+        // Load and display the favicon
+        if (tabFaviconElement && favIconUrl) { // Check if element exists
+           // Decode URL and set src for the <img> element
+            const decodedFavIconUrl = decodeURIComponent(favIconUrl);
+            tabFaviconElement.src = decodedFavIconUrl;
+            tabFaviconElement.style.display = 'block'; // Make icon visible
+             tabFaviconElement.onerror = () => {
+                 // If the icon fails to load, hide the <img> element
+                 tabFaviconElement.style.display = 'none';
+                 console.warn("Error loading favicon:", decodedFavIconUrl);
+             };
+        } else if (tabFaviconElement) { // Hide if element exists but no URL
+           // If favIconUrl is not provided or empty, hide the <img> element
+           tabFaviconElement.style.display = 'none';
+            console.log("Favicon URL not provided for suspended tab.");
+        }
+
+        // Set the original tab title
+        if (suspendedTabTitleElement) { // Check if element exists
+             const t = window.i18nTexts || {}; // Access global texts after applyLanguage has run
+
+            if (tabTitle) {
+                // Use global escapeHTML for safety
+                suspendedTabTitleElement.textContent = window.escapeHTML(decodeURIComponent(tabTitle));
+            } else {
+                // Use localized default title if original is missing
+                suspendedTabTitleElement.textContent = t.suspendTitle || 'Tab Suspended'; // Use localized text from global object
+            }
+        }
+
+        // Click handler only for the "Restore" button
+        if (restoreButton && url) { // Check if button and URL exist
+            restoreButton.addEventListener('click', () => {
+              // Restore the tab by navigating to the original URL
+              window.location.href = decodeURIComponent(url);
+            });
+            // Make the whole document body clickable to restore the tab (Optional, but common)
+            // document.body.addEventListener('click', (event) => { // Додано об'єкт event
+            //     // Check if the click target is NOT the restore button itself, to avoid double-triggering
+            //     // Перевіряємо, чи ціль кліку НЕ є частиною контейнера скріншоту
+            //      const screenshotContainerElement = document.getElementById('screenshotContainer');
+            //      if (event.target !== restoreButton && !screenshotContainerElement?.contains(event.target)) {
+            //           window.location.href = decodeURIComponent(url);
+            //      }
+            // });
         }
     }
-  
-  
-    // Click handler only for the "Restore" button
-    if (restoreButton && url) { // Check if button and URL exist
-        restoreButton.addEventListener('click', () => {
-          // Restore the tab by navigating to the original URL
-          window.location.href = decodeURIComponent(url);
-        });
-    }
-  });
+});

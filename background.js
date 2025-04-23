@@ -4,6 +4,7 @@ let suspensionTime = 600; // За замовчуванням: 10 хвилин (6
 let whitelistUrls = [];
 let whitelistDomains = [];
 let preventSuspendIfVideoPaused = false; // Нова опція: чи забороняти призупинення при відео на паузі
+let enableScreenshots = true; // НОВА ОПЦІЯ: Чи увімкнені скріншоти на сторінці призупинення UI (впливає лише на відображення, не на захоплення)
 let lastActivity = {}; // Мітки часу останньої активності вкладок
 const suspendedTabInfo = {}; // Зберігає оригінальну інформацію про вкладки
 
@@ -67,6 +68,9 @@ async function captureAndSaveActiveTabScreenshot() {
         // Перевіряємо, що це та сама вкладка, для якої ми зараз очікуємо скріншот
         if (tabId !== currentActiveTabId) {
              console.log(`Service worker: Пропущено скріншот: Активна вкладка змінилася (очікували ${currentActiveTabId}, активна ${tabId}).`);
+             // Якщо вкладка змінилася, зупиняємо таймер для старої вкладки і не робимо скріншот
+             stopActiveTabScreenshotTimer(); // Це вже робиться в onActivated, але на всякий випадок
+             // Якщо нова активна вкладка придатна, startActiveTabScreenshotTimer() вже була викликана в onActivated.
              return;
         }
 
@@ -212,6 +216,14 @@ function migrateStorageData(data, callback) {
         migrated = true;
     }
 
+     // Міграція/встановлення значення за замовчуванням для enableScreenshots
+     if (data.enableScreenshots === undefined) {
+         changes.enableScreenshots = true; // За замовчуванням увімкнено
+         migrated = true;
+         console.log("Service worker: Міграція: Встановлено enableScreenshots=true за замовчуванням.");
+     }
+
+
     if (migrated) {
         chrome.storage.sync.set(changes, () => {
             if (chrome.runtime.lastError) {
@@ -332,7 +344,9 @@ function checkInactiveTabs() {
             const isInternalPage = tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://'); // Чи це внутрішня сторінка Chrome або розширення
             const isOurSuspendedPage = tab.url.startsWith(ourSuspendUrlPrefix); // Чи це вже наша сторінка призупинення
             const isHttpOrHttps = tab.url.startsWith('http://') || tab.url.startsWith('https://'); // Чи це стандартна веб-сторінка
-            const tabIsWhitelisted = isWhitelisted(tab.url); // Чи вкладка знаходиться у білому списку
+            // Перевірка білого списку повинна використовувати оригінальний URL, якщо вкладка вже призупинена нами
+            const effectiveUrlForWhitelistCheck = isOurSuspendedPage && suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
+            const tabIsWhitelisted = isWhitelisted(effectiveUrlForWhitelistCheck); // Чи вкладка знаходиться у білому списку
 
             // Отримуємо стан відео для поточної вкладки
             const tabVideoState = videoState[tab.id];
@@ -373,12 +387,18 @@ function checkInactiveTabs() {
                         console.log(`Service worker: Вкладка ${tab.id} інакше була б призупинена, але не відповідає поточним критеріям. Наступна перевірка: ${new Date(potentialNextEligibilityTime).toLocaleTimeString()}`);
                     }
                 }
-            } // Закриваємо if (!tab.active ...)
+            } else {
+                 // Вкладка не може бути призупинена з інших причин (активна, системна, наша сторінка, в білому списку)
+                 // Плануємо наступну перевірку на основі наступної можливої події (наприклад, активація, зміна URL),
+                 // але не за таймером неактивності, бо вона не підпадає під цей критерій.
+                 // Для таких вкладок не потрібно оновлювати nextPredictedCheckTime на основі їх неактивності.
+            }
         } // Закриваємо цикл for
 
         // Плануємо наступний alarm
-        if (nextPredictedCheckTime !== Infinity) {
-            setupAlarm(Math.max(now + 5000, nextPredictedCheckTime)); // Наступна перевірка не раніше, ніж через 5 секунд
+        // Плануємо наступний alarm лише якщо є придатні вкладки або якщо був збій (в цьому випадку nextPredictedCheckTime може бути Infinity, і ми використовуємо fallback now + 5000)
+        if (nextPredictedCheckTime !== Infinity || tabs.length === 0) { // Перевіряємо tabs.length, бо якщо вкладок 0, то nextPredictedCheckTime буде Infinity
+             setupAlarm(Math.max(now + 5000, nextPredictedCheckTime)); // Наступна перевірка не раніше, ніж через 5 секунд
         } else {
             console.log("Service worker: Немає придатних вкладок для планування наступної перевірки Alarm.");
             // Якщо немає вкладок, які можуть бути призупинені, очищаємо alarm
@@ -394,6 +414,10 @@ function checkInactiveTabs() {
 
 // Перевірка, чи URL знаходиться у білому списку
 function isWhitelisted(url) {
+    // Важливо: Ця функція повинна використовувати оригінальний URL вкладки,
+    // навіть якщо вкладка зараз показує suspend.html.
+    // Фоновий скрипт передає оригінальний URL при виклику цієї функції,
+    // або використовує originalInfo.url, якщо він доступний.
     if (!url || !url.startsWith('http')) return false; // Білий список застосовується лише до http/https
     try {
         const urlObj = new URL(url);
@@ -406,7 +430,8 @@ function isWhitelisted(url) {
         const lowerDomain = domain.toLowerCase();
         return whitelistDomains.some(d => {
             if (lowerDomain === d) return true; // Точний збіг домену
-            if (lowerDomain.endsWith('.' + d)) return true; // Збіг субдомену (наприклад, www.example.com для example.com)
+            // Додаємо перевірку, щоб d не був порожнім або не починався з точки
+            if (d && !d.startsWith('.') && lowerDomain.endsWith('.' + d)) return true; // Збіг субдомену (наприклад, www.example.com для example.com)
             return false;
         });
     } catch (e) {
@@ -430,13 +455,17 @@ async function suspendTab(tab, reason = 'timer') {
     const hasPausedVideoBlockingSuspend = preventSuspendIfVideoPaused && tabVideoState?.hasVideo && tabVideoState?.hasPlayed && !tabVideoState?.isPlaying;
 
 
-    // Перевіряємо, чи можна призупинити вкладку
-    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith(ourSuspendUrlPrefix) || !tab.url.startsWith('http') || isWhitelisted(tab.url) || hasPausedVideoBlockingSuspend) {
+    // Перевіряємо, чи можна призупинити вкладку (використовуємо tab.url для перевірки, чи це вже не наша сторінка)
+    // Важливо: перевірка білого списку тут повинна використовувати оригінальний URL, а не поточний suspend.html URL
+    // Якщо вкладка вже на suspend.html, ми не намагаємося її призупинити знову.
+    const effectiveUrlForWhitelistCheck = suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
+    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith(ourSuspendUrlPrefix) || !tab.url.startsWith('http') || isWhitelisted(effectiveUrlForWhitelistCheck) || hasPausedVideoBlockingSuspend) {
         let skipReason = 'Unknown';
         if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) skipReason = 'System/Extension';
         else if (tab.url.startsWith(ourSuspendUrlPrefix)) skipReason = 'Already Suspended';
         else if (!tab.url.startsWith('http')) skipReason = 'Non-HTTP';
-        else if (isWhitelisted(tab.url)) skipReason = 'Whitelisted';
+        // Тут використовуємо effectiveUrlForWhitelistCheck для причини, яка відобразиться в логах
+        else if (isWhitelisted(effectiveUrlForWhitelistCheck)) skipReason = 'Whitelisted';
         else if (hasPausedVideoBlockingSuspend) skipReason = 'Video Paused (after playing)'; // Вказуємо, що блокує відео на паузі
 
         console.warn(`Service worker: Пропущено призупинення вкладки ${tab.id}: ${tab.url} (Причина: ${skipReason})`);
@@ -455,13 +484,17 @@ async function suspendTab(tab, reason = 'timer') {
     suspendedTabInfo[currentTabId].url = originalUrl;
     suspendedTabInfo[currentTabId].title = originalTitle;
     suspendedTabInfo[currentTabId].favIconUrl = favIconUrl;
-    suspendedTabInfo[currentTabId].suspendedTime = suspendedTabInfo[currentTabId].suspendedTime || Date.now(); // Час призупинення (вперше)
+    // Зберігаємо час призупинення лише при ПЕРШОМУ призупиненні (щоб час неактивності не скидався, якщо вкладка була відновлена, а потім знову призупинена)
+    if (!suspendedTabInfo[currentTabId].suspendedTime) {
+         suspendedTabInfo[currentTabId].suspendedTime = Date.now();
+    }
     suspendedTabInfo[currentTabId].reason = reason; // Причина призупинення ('timer' або 'manual')
 
     console.log(`Service worker: Збережено інфо призупинення для вкладки ${currentTabId}:`, suspendedTabInfo[currentTabId]);
 
     // Формуємо URL нашої сторінки призупинення з параметрами
-    const suspendedPageUrl = `${ourSuspendUrlPrefix}?url=${encodeURIComponent(originalUrl)}&title=${encodeURIComponent(originalTitle || '')}&tabId=${currentTabId}&favIconUrl=${encodeURIComponent(favIconUrl)}`;
+    // Використовуємо encodeURIComponent для всіх параметрів
+    const suspendedPageUrl = `${ourSuspendUrlPrefix}?url=${encodeURIComponent(originalUrl || '')}&title=${encodeURIComponent(originalTitle || '')}&tabId=${currentTabId}&favIconUrl=${encodeURIComponent(favIconUrl || '')}`;
 
     // Оновлюємо URL вкладки на нашу сторінку призупинення
     try {
@@ -472,9 +505,13 @@ async function suspendTab(tab, reason = 'timer') {
         return Promise.resolve(); // Успіх
     } catch (e) {
         console.error(`Service worker: Помилка оновлення URL вкладки ${currentTabId}:`, e);
-        delete suspendedTabInfo[currentTabId]; // Видаляємо збережену інфо призупинення, якщо оновлення не вдалося
+        // При помилці оновлення URL, видаляємо збережену інфо призупинення,
+        // ОСКІЛЬКИ ВКЛАДКА НЕ ПЕРЕЙШЛА НА SUSPEND.HTML
+        delete suspendedTabInfo[currentTabId];
+        console.log(`Service worker: Видалено інфо призупинення для вкладки ${currentTabId} через помилку оновлення URL.`);
+
         // У випадку помилки також очищаємо скріншот
-        chrome.storage.session.remove(`screenshot_${currentTabId}`).catch(err => console.warn(`Service worker: Помилка очищення скріншоту після помилки призупинення для ${currentTabId}:`, err));
+        chrome.storage.session.remove(`screenshot_${currentTabId}`).catch(err => console.warn(`Service worker: Помилка очищення старого скріншоту для ${currentTabId}:`, err));
         return Promise.reject(e); // Повертаємо помилку
     }
 }
@@ -513,59 +550,71 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     const ourSuspendUrlPrefix = `chrome-extension://${chrome.runtime.id}/suspend.html`;
     const isOurSuspendedPage = tab.url.startsWith(ourSuspendUrlPrefix); // Чи вкладка переходить на нашу сторінку призупинення
-    const wasSuspendedByUs = suspendedTabInfo[tabId]; // Чи була ця вкладка раніше призупинена нами
+    const wasSuspendedByUs = suspendedTabInfo[tabId]; // Чи була ця вкладка раніше призупинена нами (перевіряємо перед зміною URL)
 
     // Якщо URL змінився (і це не наша сторінка призупинення) або сторінка повністю завантажилася (і це не наша сторінка призупинення)
-    if ((changeInfo.url && !isOurSuspendedPage) || (changeInfo.status === 'complete' && !isOurSuspendedPage)) {
+    if ((changeInfo.url && !changeInfo.url.startsWith(ourSuspendUrlPrefix)) || (changeInfo.status === 'complete' && !isOurSuspendedPage)) {
         if (tab.id !== chrome.tabs.TAB_ID_NONE) {
             lastActivity[tab.id] = Date.now(); // Оновлюємо час останньої активності
             // Не викликаємо checkInactiveTabs тут одразу, щоб уникнути надмірного навантаження
             // Alarm спрацює у свій час, або буде перепланований.
-            // setTimeout(checkInactiveTabs, 100);
+            // setTimeout(checkInactiveTabs, 100); // Це викликається в onActivated або onRemoved, цього достатньо
         }
         // Якщо URL змінився і це не наша сторінка призупинення, очищаємо стан відео для цієї вкладки
-        if (changeInfo.url && !isOurSuspendedPage) {
+        if (changeInfo.url && !changeInfo.url.startsWith(ourSuspendUrlPrefix)) {
+             // Використовуємо changeInfo.url, бо tab.url може бути ще старим на цей момент
             if (videoState[tabId]) {
                 delete videoState[tabId];
                 console.log(`Service worker: Очищено video state для вкладки ${tabId} через зміну URL.`);
             }
         }
         // Якщо URL змінився, очищаємо збережений скріншот для цієї вкладки, оскільки він вже не актуальний
-        chrome.storage.session.remove(`screenshot_${tabId}`).catch(e => console.warn(`Service worker: Помилка очищення скріншоту при оновленні URL для ${tabId}:`, e));
+        if (changeInfo.url && tab.id !== chrome.tabs.TAB_ID_NONE) {
+            chrome.storage.session.remove(`screenshot_${tabId}`).catch(e => console.warn(`Service worker: Помилка очищення скріншоту при оновленні URL для ${tabId}:`, e));
+             console.log(`Service worker: Очищено скріншот для вкладки ${tabId} через зміну URL.`);
+        }
     }
 
-    // Якщо сторінка повністю завантажилася, була призупинена нами і НЕ є нашою сторінкою призупинення
-    // Це означає, що користувач, ймовірно, відновив вкладку з suspend.html або перейшов на інший URL
-    if (changeInfo.status === 'complete' && tab.id !== chrome.tabs.TAB_ID_NONE && wasSuspendedByUs && !isOurSuspendedPage) {
-        console.log(`Service worker: Вкладка ${tabId} відновлена (навігація з suspend.html?). Очищення інформації про призупинення.`);
-        delete suspendedTabInfo[tabId]; // Очищаємо інформацію про призупинення
-        // Очищаємо збережений скріншот після успішного відновлення
-        chrome.storage.session.remove(`screenshot_${tabId}`).catch(e => console.warn(`Service worker: Помилка очищення скріншоту після відновлення для ${tabId}:`, e));
-        setTimeout(checkInactiveTabs, 100); // Плануємо перевірку
-    }
+     // Якщо сторінка повністю завантажилася І це стандартна http/https сторінка (не наша suspend page)
+     // І ця вкладка раніше була призупинена нами (тобто користувач натиснув "Повернутись")
+     if (changeInfo.status === 'complete' && tab.id !== chrome.tabs.TAB_ID_NONE && (tab.url.startsWith('http://') || tab.url.startsWith('https://')) && !isOurSuspendedPage && wasSuspendedByUs) {
+          console.log(`Service worker: Вкладка ${tabId} відновлена (навігація з suspend.html). Очищення інформації про призупинення.`);
+          delete suspendedTabInfo[tab.id]; // Очищаємо інформацію про призупинення
+          // Очищаємо збережений скріншот після успішного відновлення
+          chrome.storage.session.remove(`screenshot_${tabId}`).catch(e => console.warn(`Service worker: Помилка очищення скріншоту після відновлення для ${tabId}:`, e));
+          setTimeout(checkInactiveTabs, 100); // Плануємо перевірку
+     }
+
 
     // Якщо вкладка оновлюється до нашої сторінки призупинення і у нас немає збереженої інфи про неї
     // (може статися при перезавантаженні service worker або браузера)
     if (changeInfo.url && changeInfo.url.startsWith(ourSuspendUrlPrefix) && tab.id !== chrome.tabs.TAB_ID_NONE) {
         if (!suspendedTabInfo[tab.id]) {
             // Спробуємо витягти оригінальну інфо з параметрів URL
-            const params = new URLSearchParams(new URL(changeInfo.url).search);
-            const originalUrl = decodeURIComponent(params.get('url') || '');
-            const originalTitle = decodeURIComponent(params.get('title') || '');
-            const favIconUrlFromUrl = decodeURIComponent(params.get('favIconUrl') || '');
-            const originalTabIdFromUrl = parseInt(params.get('tabId') || tab.id);
+            try {
+                const params = new URLSearchParams(new URL(changeInfo.url).search);
+                const originalUrl = decodeURIComponent(params.get('url') || '');
+                const originalTitle = decodeURIComponent(params.get('title') || '');
+                const favIconUrlFromUrl = decodeURIComponent(params.get('favIconUrl') || '');
+                const originalTabIdFromUrl = parseInt(params.get('tabId') || tab.id, 10); // Парсимо з radix 10
 
-            const effectiveTabId = originalTabIdFromUrl; // Використовуємо tabId з URL, якщо є, інакше поточний tab.id
+                 const effectiveTabId = originalTabIdFromUrl;
 
-            if (originalUrl && effectiveTabId !== chrome.tabs.TAB_ID_NONE) {
-                suspendedTabInfo[effectiveTabId] = {
-                    url: originalUrl,
-                    title: originalTitle,
-                    favIconUrl: favIconUrlFromUrl,
-                    suspendedTime: Date.now(), // Час відновлення інфи
-                    reason: 'unknown'
-                };
-                console.log(`Service worker: При старті: відновлено інфо призупиненої вкладки ${effectiveTabId} з URL.`);
+                 // Перевіряємо, що TabID з URL відповідає поточному TabID
+                 if (originalUrl && effectiveTabId !== chrome.tabs.TAB_ID_NONE && effectiveTabId === tab.id) {
+                    suspendedTabInfo[effectiveTabId] = {
+                        url: originalUrl,
+                        title: originalTitle,
+                        favIconUrl: favIconUrlFromUrl,
+                        suspendedTime: suspendedTabInfo[effectiveTabId]?.suspendedTime || Date.now(), // Зберігаємо існуючий час або поточний
+                        reason: suspendedTabInfo[effectiveTabId]?.reason || 'unknown' // Зберігаємо існуючу причину або unknown
+                    };
+                    console.log(`Service worker: При старті/оновленні до suspend.html: відновлено інфо призупиненої вкладки ${effectiveTabId} з URL.`);
+                 } else {
+                      console.warn(`Service worker: Не вдалося відновити інфо призупиненої вкладки з URL ${changeInfo.url}. EffectiveTabId: ${effectiveTabId}, CurrentTabId: ${tab.id}`);
+                 }
+            } catch (e) {
+                console.error(`Service worker: Помилка парсингу URL або обробки відновлення інфо з suspend.html URL ${changeInfo.url}:`, e);
             }
         }
         // Очищаємо стан відео, оскільки вкладка перейшла на suspend.html
@@ -577,6 +626,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 
      // Зупиняємо таймер скріншотів, якщо активна вкладка змінює URL
+     // Це вже робиться в onActivated, але додаткова перевірка тут також доречна
      if (tabId === currentActiveTabId && changeInfo.url) {
           stopActiveTabScreenshotTimer();
      }
@@ -591,7 +641,7 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
     if (activeInfo.tabId !== chrome.tabs.TAB_ID_NONE) {
         lastActivity[activeInfo.tabId] = Date.now(); // Оновлюємо час активності
         // Не викликаємо checkInactiveTabs тут одразу
-        // setTimeout(checkInactiveTabs, 100);
+        setTimeout(checkInactiveTabs, 100); // Плануємо перевірку через короткий час після активації
 
         // --- ДОДАНО: Запускаємо таймер скріншотів для нової активної вкладки ---
         chrome.tabs.get(activeInfo.tabId, (tab) => {
@@ -645,23 +695,30 @@ chrome.tabs.query({}, (tabs) => {
 
             // Якщо вкладка на нашій сторінці призупинення, але ми не маємо її інфи, спробуємо відновити з URL
             if (tab.url.startsWith(ourSuspendUrlPrefix) && !suspendedTabInfo[tab.id]) {
-                const params = new URLSearchParams(new URL(tab.url).search);
-                const originalUrl = decodeURIComponent(params.get('url') || '');
-                const originalTitle = decodeURIComponent(params.get('title') || '');
-                const favIconUrlFromUrl = decodeURIComponent(params.get('favIconUrl') || '');
-                const originalTabIdFromUrl = parseInt(params.get('tabId') || tab.id);
+                try {
+                    const params = new URLSearchParams(new URL(tab.url).search);
+                    const originalUrl = decodeURIComponent(params.get('url') || '');
+                    const originalTitle = decodeURIComponent(params.get('title') || '');
+                    const favIconUrlFromUrl = decodeURIComponent(params.get('favIconUrl') || '');
+                    const originalTabIdFromUrl = parseInt(params.get('tabId') || tab.id, 10);
 
-                const effectiveTabId = originalTabIdFromUrl;
+                    const effectiveTabId = originalTabIdFromUrl;
 
-                if (originalUrl && effectiveTabId !== chrome.tabs.TAB_ID_NONE) {
-                    suspendedTabInfo[effectiveTabId] = {
-                        url: originalUrl,
-                        title: originalTitle,
-                        favIconUrl: favIconUrlFromUrl,
-                        suspendedTime: Date.now(), // Час відновлення інфи
-                        reason: 'unknown'
-                    };
-                    console.log(`Service worker: При старті: відновлено інфо призупиненої вкладки ${effectiveTabId} з URL.`);
+                    // Перевіряємо, що TabID з URL відповідає поточному TabID
+                    if (originalUrl && effectiveTabId !== chrome.tabs.TAB_ID_NONE && effectiveTabId === tab.id) {
+                        suspendedTabInfo[effectiveTabId] = {
+                            url: originalUrl,
+                            title: originalTitle,
+                            favIconUrl: favIconUrlFromUrl,
+                            suspendedTime: suspendedTabInfo[effectiveTabId]?.suspendedTime || Date.now(), // Зберігаємо існуючий час або поточний
+                            reason: suspendedTabInfo[effectiveTabId]?.reason || 'unknown' // Зберігаємо існуючу причину або unknown
+                        };
+                        console.log(`Service worker: При старті: відновлено інфо призупиненої вкладки ${effectiveTabId} з URL.`);
+                    } else {
+                        console.warn(`Service worker: При старті: Не вдалося відновити інфо призупиненої вкладки з URL ${tab.url}. EffectiveTabId: ${effectiveTabId}, CurrentTabId: ${tab.id}`);
+                    }
+                } catch (e) {
+                     console.error(`Service worker: При старті: Помилка парсингу URL або обробки відновлення інфо з suspend.html URL ${tab.url}:`, e);
                 }
             }
 
@@ -685,6 +742,10 @@ chrome.tabs.query({}, (tabs) => {
          // Якщо немає активних вкладок при старті (наприклад, тільки вікно браузера без вкладок)
          stopActiveTabScreenshotTimer();
     }
+
+     // Запускаємо початкову перевірку Alarm після завантаження налаштувань та заповнення lastActivity
+     // Це також відбудеться після міграції даних у callback `chrome.storage.sync.get`
+     // checkInactiveTabs(); // Цей виклик зайвий, він вже є в callback `chrome.storage.sync.get` після міграції
 });
 
 // Слухаємо alarms
@@ -719,7 +780,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Допоміжна функція для надсилання відповіді лише один раз
     const sendAsyncResponse = (response) => {
         if (!responseSent) {
-            sendResponse(response);
+            // Перевіряємо, чи порт ще відкритий перед надсиланням відповіді
+            // Це може статися, якщо UI-сторінка (popup/options/suspend/debug) була закрита раніше
+             try {
+                 if (typeof sendResponse === 'function') { // Перевіряємо, чи sendResponse є дійсною функцією
+                    sendResponse(response);
+                 } else {
+                     console.warn("Service worker: sendResponse is not a function. UI page likely closed.", request, response);
+                 }
+             } catch (e) {
+                  // Може статися помилка "The message port closed before a response was received."
+                  console.warn("Service worker: Помилка надсилання відповіді: порт закрито.", e, request, response);
+             }
             responseSent = true;
         } else {
             console.warn("Service worker: sendResponse викликано кілька разів для одного повідомлення.", request, response);
@@ -735,7 +807,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 lastActivity[sender.tab.id] = Date.now();
                 // Не викликаємо checkInactiveTabs тут одразу, щоб уникнути надмірного навантаження
                 // Alarm спрацює у свій час, або буде перепланований.
-                // setTimeout(checkInactiveTabs, 100);
+                // setTimeout(checkInactiveTabs, 100); // Це викликається в onActivated або onRemoved, цього достатньо
                 sendAsyncResponse({ success: true });
             } else {
                 sendAsyncResponse({ success: false, error: "No valid tab ID in sender" });
@@ -785,15 +857,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     const isInternalPage = tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://');
                     const isOurSuspendedPage = tab.url.startsWith(ourSuspendUrlPrefix);
                     const isHttpOrHttps = tab.url.startsWith('http://') || tab.url.startsWith('https://');
+                    // Використовуємо оригінальний URL для перевірки білого списку, якщо він доступний
+                     const effectiveUrlForWhitelistCheck = suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
+                    const tabIsWhitelisted = isWhitelisted(effectiveUrlForWhitelistCheck);
                     const tabVideoState = videoState[tab.id];
                     // Перевіряємо, чи відео на паузі блокує призупинення
                     const hasPausedVideoBlockingSuspend = preventSuspendIfVideoPaused && tabVideoState?.hasVideo && tabVideoState?.hasPlayed && !tabVideoState?.isPlaying;
 
+                    // При ручному призупиненні, перевірка повинна бути на поточному стані вкладки tab.url
+                    // Якщо вкладка вже на suspend.html, ми її не призупиняємо ручно.
                     if (!isHttpOrHttps || isInternalPage || isOurSuspendedPage || isWhitelisted(tab.url) || hasPausedVideoBlockingSuspend) {
                         let skipReason = 'Cannot suspend';
                         if (isInternalPage) skipReason = 'System/Extension Page';
                         else if (isOurSuspendedPage) skipReason = 'Already Suspended';
                         else if (!isHttpOrHttps) skipReason = 'Non-HTTP Page';
+                        // Тут використовуємо tab.url, бо це ручне призупинення активної вкладки з Popup
                         else if (isWhitelisted(tab.url)) skipReason = 'Whitelisted';
                         else if (hasPausedVideoBlockingSuspend) skipReason = 'Video Paused (after playing)'; // Причина - відео на паузі
 
@@ -803,10 +881,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         // Якщо призупинення дозволено, встановлюємо причину 'manual' та призупиняємо
                         if (tab.id !== chrome.tabs.TAB_ID_NONE) {
                             suspendedTabInfo[tab.id] = suspendedTabInfo[tab.id] || {};
+                             // Зберігаємо оригінальний URL, якщо його ще немає (наприклад, при першому ручному призупиненні)
+                             if(!suspendedTabInfo[tab.id].url) suspendedTabInfo[tab.id].url = tab.url;
+                             if(!suspendedTabInfo[tab.id].title) suspendedTabInfo[tab.id].title = tab.title;
+                             if(!suspendedTabInfo[tab.id].favIconUrl) suspendedTabInfo[tab.id].favIconUrl = tab.favIconUrl;
+                             if(!suspendedTabInfo[tab.id].suspendedTime) suspendedTabInfo[tab.id].suspendedTime = Date.now(); // Встановлюємо час призупинення
                             suspendedTabInfo[tab.id].reason = 'manual';
                             console.log(`Service worker: Причина призупинення для вкладки ${tab.id} встановлена на 'manual'.`);
                         }
                         // При ручному призупиненні, скріншот робиться для активної вкладки Popup'ом, тому тут його не робимо.
+                        // Однак, оскільки логіка захоплення в captureAndSaveActiveTabScreenshot працює за таймером для *активної* вкладки,
+                        // якщо вкладка активна, скріншот для неї вже може бути або буде захоплений.
+                        // Немає потреби викликати captureVisibleTab тут синхронно.
                         suspendTab(tab, 'manual')
                             .then(() => {
                                 sendAsyncResponse({ success: true });
@@ -846,17 +932,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     const isInternalPage = tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://');
                     const isOurSuspendedPage = tab.url.startsWith(ourSuspendUrlPrefix);
                     const isHttpOrHttps = tab.url.startsWith('http://') || tab.url.startsWith('https://');
-                    const tabIsWhitelisted = isWhitelisted(tab.url);
+                    // Використовуємо оригінальний URL для перевірки білого списку
+                    const effectiveUrlForWhitelistCheck = suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
+                    const tabIsWhitelisted = isWhitelisted(effectiveUrlForWhitelistCheck);
                     const tabVideoState = videoState[tab.id];
                      // Перевіряємо, чи відео на паузі блокує призупинення
                     const hasPausedVideoBlockingSuspend = preventSuspendIfVideoPaused && tabVideoState?.hasVideo && tabVideoState?.hasPlayed && !tabVideoState?.isPlaying;
 
 
-                    // Якщо вкладка може бути призупинена
+                    // Якщо вкладка може бути призупинена (за tab.url, бо вона фонова)
                     if (isHttpOrHttps && !isInternalPage && !isOurSuspendedPage && !tabIsWhitelisted && !hasPausedVideoBlockingSuspend) {
                         try {
                             if (tab.id !== chrome.tabs.TAB_ID_NONE) {
                                 suspendedTabInfo[tab.id] = suspendedTabInfo[tab.id] || {};
+                                // Зберігаємо оригінальний URL, якщо його ще немає
+                                 if(!suspendedTabInfo[tab.id].url) suspendedTabInfo[tab.id].url = tab.url;
+                                 if(!suspendedTabInfo[tab.id].title) suspendedTabInfo[tab.id].title = tab.title;
+                                 if(!suspendedTabInfo[tab.id].favIconUrl) suspendedTabInfo[tab.id].favIconUrl = tab.favIconUrl;
+                                 if(!suspendedTabInfo[tab.id].suspendedTime) suspendedTabInfo[tab.id].suspendedTime = Date.now(); // Встановлюємо час призупинення
                                 suspendedTabInfo[tab.id].reason = 'manual'; // Встановлюємо причину 'manual'
                                 console.log(`Service worker: Причина призупинення для вкладки ${tab.id} встановлена на 'manual' (suspendAll).`);
                             }
@@ -872,6 +965,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         if (isInternalPage) skipReason = 'System/Extension';
                         else if (isOurSuspendedPage) skipReason = 'Already Suspended';
                         else if (!isHttpOrHttps) skipReason = 'Non-HTTP';
+                         // Тут використовуємо tab.url для логування, але isWhitelisted використовує effectiveUrlForWhitelistCheck
                         else if (tabIsWhitelisted) skipReason = 'Whitelisted';
                         else if (hasPausedVideoBlockingSuspend) skipReason = 'Video Paused (after playing)'; // Причина - відео на паузі
                         console.log(`Service worker: Пропущено ручне призупинення вкладки ${tab.id}: ${tab.url} (Причина: ${skipReason})`);
@@ -918,7 +1012,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // Запит на додавання домену до білого списку
             if (request.domain) {
                 const domainToAdd = request.domain.trim().toLowerCase(); // Обрізаємо пробіли та переводимо в нижній регістр
-                 // Перевіряємо формат домену
+                 // Перевіряємо формат домену (простий, не містить слешів, містить хоча б одну крапку, не містить пробілів)
                 if (domainToAdd && !domainToAdd.includes('/') && domainToAdd.includes('.') && !domainToAdd.includes(' ')) {
                     // Перевіряємо, чи домен вже є у списку
                     if (!whitelistDomains.includes(domainToAdd)) {
@@ -951,7 +1045,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // Використовуємо статичні англійські рядки для логування в SW, UI скрипти локалізують самостійно.
             if (request.tabId !== undefined && request.tabId !== chrome.tabs.TAB_ID_NONE) {
                  chrome.tabs.get(request.tabId, (tab) => {
-                      //const t = window.i18nTexts || {}; // ВИДАЛЕНО: Не використовувати window в SW
                       if (chrome.runtime.lastError) {
                            console.error(`Service worker: Failed to get tab ${request.tabId} for status check:`, chrome.runtime.lastError); // Логуємо англійською
                            sendAsyncResponse({ success: false, error: chrome.runtime.lastError.message || "Failed to get tab status" });
@@ -968,41 +1061,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                        const isOurSuspended = tab.url.startsWith(ourSuspendUrlPrefix);
                        const isInternal = tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://');
                        const isHttpOrHttps = tab.url.startsWith('http://') || tab.url.startsWith('https://');
-                       const effectiveUrl = isOurSuspended && suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
-                       const tabIsWhitelisted = isWhitelisted(effectiveUrl);
+                       // Для перевірки білого списку завжди використовуємо оригінальний URL, якщо вкладка призупинена
+                       const effectiveUrlForWhitelistCheck = isOurSuspended && suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
+                       const tabIsWhitelisted = isWhitelisted(effectiveUrlForWhitelistCheck);
                        const tabVideoState = videoState[tab.id];
                        const hasPausedVideoBlockingSuspend = preventSuspendIfVideoPaused && tabVideoState?.hasVideo && tabVideoState?.hasPlayed && !tabVideoState?.isPlaying;
 
-
+                       // Причина для відображення в UI Popup
                        let reasonKey = 'reasonUnknown';
-                       if (isOurSuspended) {
-                           reasonKey = suspendedTabInfo[tab.id]?.reason === 'manual' ? 'reasonSuspendedManually' : (suspendedTabInfo[tab.id]?.reason === 'timer' ? 'reasonSuspendedByTimer' : 'reasonSuspended');
-                       } else if (isInternal) {
+                        // Спочатку перевіряємо причини, що забороняють ручне призупинення
+                        if (isInternal) {
                            reasonKey = 'reasonSystem';
+                       } else if (isOurSuspended) {
+                           reasonKey = 'reasonSuspended'; // Просто вказуємо, що вже призупинена
                        } else if (!isHttpOrHttps) {
-                            reasonKey = 'reasonError'; // Або може бути reasonSystem для інших схем
-                       } else if (tabIsWhitelisted) {
+                            reasonKey = 'reasonError'; // Не HTTP/HTTPS
+                       } else if (isWhitelisted(tab.url)) { // Перевіряємо білий список за поточним URL для Popup
                            reasonKey = 'reasonWhitelisted';
-                       } else if (tab.active) { // Хоча запит робиться для активної вкладки, перевірка є
-                            reasonKey = 'reasonActive';
                        } else if (hasPausedVideoBlockingSuspend) {
                            reasonKey = 'reasonVideoPaused';
-                       } else if (tabVideoState?.hasVideo) {
-                           if (tabVideoState.isPlaying) {
-                               reasonKey = 'reasonVideoPlaying';
-                           } else if (!tabVideoState.hasPlayed) {
-                               reasonKey = 'reasonVideoNotPlayed';
-                           } else { // Відео на паузі, але опція вимкнена
-                               reasonKey = 'reasonVideoPausedOptionOff';
-                           }
-                       } else if (suspensionTime <= 0) {
-                            reasonKey = 'reasonDisabled';
-                       } else { // Для активної вкладки це не повинно спрацьовувати, але як резерв
-                            reasonKey = 'reasonActive';
+                       } else {
+                           // Якщо жодна з попередніх причин не спрацювала, вкладку можна призупинити вручну
+                           reasonKey = 'reasonReady'; // Можна призупинити вручну
                        }
 
-                       // Визначаємо, чи можна призупинити вкладку вручну на основі reasonKey
-                       const canManuallySuspend = isHttpOrHttps && !isInternal && !isOurSuspended && !tabIsWhitelisted && !hasPausedVideoBlockingSuspend;
+                       // Визначаємо, чи можна призупинити вкладку вручну
+                       // Ручне призупинення дозволено, якщо це http/https, не внутрішня/наша, не в білому списку (за поточним URL), і відео не блокує
+                       const canManuallySuspend = isHttpOrHttps && !isInternal && !isOurSuspended && !isWhitelisted(tab.url) && !hasPausedVideoBlockingSuspend;
+
 
                        sendAsyncResponse({
                            success: true,
@@ -1010,10 +1096,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                            isInternalPage: isInternal,
                            isHttpOrHttps: isHttpOrHttps,
                            isOurSuspendedPage: isOurSuspended,
-                           isWhitelisted: tabIsWhitelisted,
+                           isWhitelisted: isWhitelisted(tab.url), // Повертаємо статус білого списку для поточного URL вкладки
                            hasPausedVideoBlockingSuspend: hasPausedVideoBlockingSuspend,
                            canManuallySuspend: canManuallySuspend, // Нове поле, що вказує, чи дозволено ручне призупинення
-                           reasonKey: reasonKey // Ключ причини для відображення в UI. UI сам його локалізує.
+                           reasonKey: reasonKey, // Ключ причини для відображення в UI (Popup може його використати)
+                           originalSuspendedUrl: suspendedTabInfo[tab.id]?.url || null // Повертаємо оригінальний URL, якщо вкладка призупинена
                        });
                  });
             } else {
@@ -1062,7 +1149,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     let reasonKey = 'reasonUnknown'; // Ключ причини (для локалізації)
                     // Визначаємо ефективний URL (для призупинених використовуємо оригінальний)
                     const effectiveUrl = isOurSuspended && suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
-                    const tabIsWhitelisted = isWhitelisted(effectiveUrl); // Чи вкладка в білому списку (за ефективним URL)
+                    // Перевірка білого списку завжди використовує effectiveUrl
+                    const tabIsWhitelisted = isWhitelisted(effectiveUrl);
                     const tabVideoState = videoState[tab.id];
                     const hasPausedVideoBlockingSuspend = preventSuspendIfVideoPaused && tabVideoState?.hasVideo && tabVideoState?.hasPlayed && !tabVideoState?.isPlaying;
 
@@ -1077,6 +1165,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         reasonKey = 'reasonError'; // Не HTTP/HTTPS (наприклад, data: URL, file: URL)
                     } else if (tabIsWhitelisted) {
                            reasonKey = 'reasonWhitelisted'; // У білому списку
+                    } else if (!enableScreenshots && isOurSuspended) { // Нова причина: Скріншоти вимкнено в налаштуваннях
+                         // Ця причина має бути перевірена перед іншими причинами для призупинених вкладок,
+                         // але оскільки ми вже визначили reasonKey для isOurSuspended вище,
+                         // додамо її як окрему деталь або змініть логіку визначення reasonKey, якщо потрібно.
+                         // Давайте додамо це як деталь, а не змінюватимемо основну причину Suspended.
+                         // Або, якщо вкладка ПРИЗУПИНЕНА І СКРІНШОТИ ВИМКНЕНІ, можемо показати це як основну причину?
+                         // Ні, основна причина - вона призупинена. Причина "Screenshots disabled" стосується лише ВІДОБРАЖЕННЯ на suspend.html.
+                         // Тому ця причина debug panel "reasonScreenshotDisabledSetting" не використовується для *статусу* вкладки.
+                         // Залишаємо її, якщо в майбутньому опція "enableScreenshots" буде впливати на *логіку* призупинення.
+                         // Або, її можна використовувати, щоб вказати, що скріншот не відобразиться на suspend.html через налаштування.
+                         // Давайте додамо її в DebugInfo, але не як reasonKey, а як окремий прапорець/деталь.
                     } else if (tab.active) {
                         reasonKey = 'reasonActive'; // Активна вкладка
                     } else if (hasPausedVideoBlockingSuspend) {
@@ -1110,40 +1209,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // Додаємо деталі стану відео до причини, якщо вони є
                     let reasonDetails = '';
                     if (tabVideoState?.hasVideo !== undefined) { // Перевіряємо, чи є дані про відео
-                        reasonDetails = ` (Video: ${tabVideoState.hasVideo ? 'Yes' : 'No'}, Playing: ${tabVideoState.isPlaying ? 'Yes' : 'No'}, Played: ${tabVideoState.hasPlayed ? 'Yes' : 'No'})`;
+                        reasonDetails += ` (Video: ${tabVideoState.hasVideo ? 'Yes' : 'No'}, Playing: ${tabVideoState.isPlaying ? 'Yes' : 'No'}, Played: ${tabVideoState.hasPlayed ? 'Yes' : 'No'})`;
+                    }
+                    // Додаємо деталь про вимкнені скріншоти, якщо вкладка призупинена і опція вимкнена
+                    if (isOurSuspended && !enableScreenshots) {
+                         reasonDetails += ` (${'Screenshots disabled by setting'})`; // Використовуємо англ текст тут, Debug UI локалізує ключ причини
                     }
 
+
                     // Використовуємо функції escapeHTML_SW та shortenUrl_SW для Debug Panel
-                    const displayTitle = tab.title || 'Без назви';
-                    const displayUrl = isOurSuspended && suspendedTabInfo[tab.id]?.url ? suspendedTabInfo[tab.id].url : tab.url;
+                    // Для Debug Panel ми насправді хочемо бачити оригінальний URL та Title, якщо вкладка призупинена
+                    // Фоновий скрипт вже передає оригінальний URL та Title в об'єкті вкладки, якщо він є!
+                    const displayTitle = suspendedTabInfo[tab.id]?.title || tab.title || 'Без назви'; // Використовуємо оригінальний Title, якщо призупинена
+                    const displayUrl = suspendedTabInfo[tab.id]?.url || tab.url; // Використовуємо оригінальний URL, якщо призупинена
+
 
                     return {
                         id: tab.id,
-                        title: escapeHTML_SW(displayTitle), // Використовуємо SW-сумісну функцію
-                        url: displayUrl, // Повний URL для title атрибута в Debug
-                        displayUrl: shortenUrl_SW(displayUrl), // Скорочений та екранований для відображення
+                        title: escapeHTML_SW(displayTitle), // Екранований Title
+                        url: displayUrl, // Повний (оригінальний або поточний) URL для title атрибута в Debug
+                        displayUrl: shortenUrl_SW(displayUrl), // Скорочений та екранований ефективний URL для відображення
                         favIconUrl: tab.favIconUrl,
                         active: tab.active,
-                        reasonKey: reasonKey,
+                        reasonKey: reasonKey, // Ключ причини для локалізації в UI
                         videoState: tabVideoState,
-                        reasonDetails: escapeHTML_SW(reasonDetails) // Використовуємо SW-сумісну функцію
+                        reasonDetails: escapeHTML_SW(reasonDetails), // Додаткові деталі (включаючи стан відео)
+                        isOurSuspended: isOurSuspended // Додаємо прапорець, чи вкладка призупинена нами
                     };
                 });
 
-                // Формуємо об'єкт причин для кожної вкладки (можливо, дублює reasonKey в tabsInfo, але залишаємо для сумісності)
-                const suspensionReasons = tabsInfo.reduce((acc, tab) => {
-                    acc[tab.id] = tab.reasonKey;
-                    return acc;
-                }, {});
-
-                // Надсилаємо всю зібрану інформацію
+                 // Додаємо загальні налаштування до відповіді
                 sendAsyncResponse({
                     tabs: tabsInfo, // Список вкладок з причинами та станом відео
                     lastActivity: lastActivity, // Час останньої активності
                     suspensionTime: suspensionTime, // Поточний поріг призупинення
-                    suspensionReasons: suspensionReasons, // Об'єкт причин (можливо, застарілий)
                     suspendedTabInfo: suspendedTabInfo, // Інформація про призупинені вкладки
-                    preventSuspendIfVideoPaused: preventSuspendIfVideoPaused
+                    preventSuspendIfVideoPaused: preventSuspendIfVideoPaused,
+                    enableScreenshots: enableScreenshots // Надсилаємо налаштування скріншотів до Debug UI
                 });
             });
             return true; // Вказуємо, що sendResponse буде викликано асинхронно
@@ -1158,11 +1260,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Load settings on Service Worker startup
-chrome.storage.sync.get(['suspensionTime', 'whitelistUrls', 'whitelistDomains', 'preventSuspendIfVideoPaused', 'language', 'theme'], (result) => {
+// Додаємо 'enableScreenshots' до списку завантажуваних налаштувань
+chrome.storage.sync.get(['suspensionTime', 'whitelistUrls', 'whitelistDomains', 'preventSuspendIfVideoPaused', 'enableScreenshots', 'language', 'theme'], (result) => {
     console.log("Service worker: Налаштування завантажено:", result);
     // Присвоюємо значення з сховища, використовуючи значення за замовчуванням, якщо їх немає
     suspensionTime = result.suspensionTime !== undefined ? parseInt(result.suspensionTime) : 600;
-    preventSuspendIfVideoPaused = result.preventSuspendIfVideoPaused !== undefined ? result.preventSuspendIfVideoPaused : false;
+    preventSuspendIfVideoPaused = result.preventVideoSuspendIfVideoPaused !== undefined ? result.preventVideoSuspendIfVideoPaused : false;
+    // Встановлюємо значення для нового налаштування enableScreenshots (за замовчуванням true)
+    enableScreenshots = result.enableScreenshots !== undefined ? result.enableScreenshots : true;
+
+
     // Обробляємо whitelistUrls: якщо це рядок, парсимо його, якщо масив, використовуємо його (з фільтрацією недійсних значень)
     whitelistUrls = Array.isArray(result.whitelistUrls) ? result.whitelistUrls.filter(url => typeof url === 'string' && url.trim()) : (result.whitelistUrls ? result.whitelistUrls.split(',').map(url => url.trim()).filter(url => url) : []);
     // Обробляємо whitelistDomains: аналогічно URL, але переводимо в нижній регістр
@@ -1170,7 +1277,8 @@ chrome.storage.sync.get(['suspensionTime', 'whitelistUrls', 'whitelistDomains', 
 
     // Виконуємо міграцію даних, якщо потрібно, а потім встановлюємо alarm
     migrateStorageData(result, () => {
-        console.log("Service worker: Фінальні налаштування після потенційної міграції:", { suspensionTime, whitelistUrls, whitelistDomains, preventSuspendIfVideoPaused });
+        console.log("Service worker: Фінальні налаштування після потенційної міграції:", { suspensionTime, whitelistUrls, whitelistDomains, preventSuspendIfVideoPaused, enableScreenshots });
+        // Запускаємо початкову перевірку Alarm після завантаження налаштувань
         setupAlarm(Date.now() + suspensionTime * 1000); // Встановлюємо alarm на час наступної можливої призупинення
     });
 });
@@ -1196,7 +1304,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
                         const ourSuspendUrlPrefix = `chrome-extension://${chrome.runtime.id}/suspend.html`;
                         tabs.forEach(tab => {
                             if (tab.id !== chrome.tabs.TAB_ID_NONE) {
-                                // Оновлюємо lastActivity тільки для стандартних веб-сторінок
+                                // Оновлюємо lastActivity тільки для стандартних веб-сторінок, які не призупинені нами
                                 if (!tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && !tab.url.startsWith(ourSuspendUrlPrefix)) {
                                     lastActivity[tab.id] = now;
                                 } else {
@@ -1216,8 +1324,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
         // Оновлення стану опції "не призупиняти відео"
         if (changes.preventVideoSuspendIfVideoPaused !== undefined) {
             preventSuspendIfVideoPaused = changes.preventVideoSuspendIfVideoPaused.newValue;
-            console.log("Service worker: Налаштування preventSuspendIfVideoPaused оновлено:", preventSuspendIfVideoPaused);
+            console.log("Service worker: Налаштування preventSuspendIfVideoPaused оновлено:", preventVideoSuspendIfVideoPaused);
             checkInactiveTabs(); // Запускаємо перевірку, оскільки це може змінити статус призупинення
+        }
+        // Оновлення стану опції "увімкнути скріншоти"
+        if (changes.enableScreenshots !== undefined) {
+            enableScreenshots = changes.enableScreenshots.newValue;
+            console.log("Service worker: Налаштування enableScreenshots оновлено:", enableScreenshots);
+            // Ця опція впливає лише на UI, не на логіку призупинення/захоплення,
+            // тому не потрібно викликати checkInactiveTabs.
         }
         // Оновлення білого списку URL
         if (changes.whitelistUrls !== undefined) {

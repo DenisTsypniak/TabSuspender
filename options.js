@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // або умовні перевірки при додаванні слухачів, щоб уникнути помилок,
   // якщо елемент не знайдено з якоїсь причини.
   const suspensionTimeSelect = document.getElementById('suspensionTime');
-  // const languageSelect = document.getElementById('language'); // Видалено, використовуємо кастомний перемикач
   const languageToggle = document.getElementById('languageToggle'); // Новий контейнер для перемикача мови
   const languageOptions = languageToggle ? languageToggle.querySelectorAll('.language-option') : []; // Опції всередині перемикача мови
 
@@ -17,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Новий чекбокс для призупинення відео
   const preventVideoSuspendCheckbox = document.getElementById('preventVideoSuspend');
+  // НОВИЙ ЧЕКБОКС для увімкнення скріншотів
+  const enableScreenshotsCheckbox = document.getElementById('enableScreenshots');
 
 
   const testOption1Checkbox = document.getElementById('testOption1'); // Може не існувати
@@ -93,7 +94,9 @@ document.addEventListener('DOMContentLoaded', () => {
       li.dataset.index = index; // Зберігаємо індекс як data-атрибут
       // Використовуємо глобальну функцію escapeHTML
       const t = window.i18nTexts || {}; // Отримуємо локалізовані тексти
-      const deleteTitle = t.clearListButton || 'Видалити'; // Локалізований текст для title кнопки видалення
+      // Використовуємо t.deleteItemConfirm для локалізації підказки
+      const deleteTitle = t.deleteItemConfirm || 'Видалити цей елемент?'; // Локалізований текст для title кнопки видалення
+
 
       let itemTextHtml;
       let itemTitleAttribute = ''; // Підказка (tooltip) для повного URL/домену
@@ -146,7 +149,16 @@ document.addEventListener('DOMContentLoaded', () => {
           // Перевіряємо, чи індекс дійсний перед видаленням
           if (index >= 0 && index < whitelistUrls.length) {
                whitelistUrls.splice(index, 1); // Видаляємо елемент з локального масиву
-               chrome.storage.sync.set({ whitelistUrls }); // Зберігаємо оновлений масив. Це викличе слухач onChanged.
+               chrome.storage.sync.set({ whitelistUrls }, () => {
+                   if (chrome.runtime.lastError) {
+                        console.error("Options script: Error saving whitelistUrls after deletion:", chrome.runtime.lastError);
+                        // Опціонально: показати повідомлення про помилку користувачу
+                   } else {
+                       // Оновлюємо UI, оскільки onChanged слухач в options.js також оновлює UI
+                       // renderList(whitelistUrlsList, whitelistUrls, 'url'); // Цей виклик дублюється через onChanged
+                       showStatusMessage(); // Показуємо статус після успішного збереження
+                   }
+               }); // Зберігаємо оновлений масив. Це викличе слухач onChanged.
           } else {
                console.warn("Options script: Invalid index for URL deletion:", index);
           }
@@ -154,7 +166,15 @@ document.addEventListener('DOMContentLoaded', () => {
            // Перевіряємо, чи індекс дійсний перед видаленням
             if (index >= 0 && index < whitelistDomains.length) {
                whitelistDomains.splice(index, 1); // Видаляємо елемент з локального масиву
-               chrome.storage.sync.set({ whitelistDomains }); // Зберігаємо оновлений масив. Це викличе слухач onChanged.
+               chrome.storage.sync.set({ whitelistDomains }, () => {
+                    if (chrome.runtime.lastError) {
+                         console.error("Options script: Error saving whitelistDomains after deletion:", chrome.runtime.lastError);
+                         // Опціонально: показати повідомлення про помилку користувачу
+                    } else {
+                        // renderList(whitelistDomainsList, whitelistDomains, 'domain'); // Цей виклик дублюється через onChanged
+                        showStatusMessage(); // Показуємо статус після успішного збереження
+                    }
+               }); // Зберігаємо оновлений масив. Це викличе слухач onChanged.
             } else {
                  console.warn("Options script: Invalid index for Domain deletion:", index);
             }
@@ -190,14 +210,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // Завантажуємо початкові налаштування та дані
-  // Включаємо нове налаштування 'preventSuspendIfVideoPaused'
-  chrome.storage.sync.get(['suspensionTime', 'whitelistUrls', 'whitelistDomains', 'preventSuspendIfVideoPaused', 'testOption1', 'testOption2'], (result) => {
+  // Включаємо нове налаштування 'preventSuspendIfVideoPaused' та 'enableScreenshots'
+  chrome.storage.sync.get(['suspensionTime', 'whitelistUrls', 'whitelistDomains', 'preventSuspendIfVideoPaused', 'enableScreenshots', 'testOption1', 'testOption2'], (result) => {
     if (suspensionTimeSelect && result.suspensionTime !== undefined) suspensionTimeSelect.value = result.suspensionTime;
 
-    // Встановлюємо початковий стан нового чекбокса
+    // Встановлюємо початковий стан чекбоксів
     if (preventVideoSuspendCheckbox && result.preventSuspendIfVideoPaused !== undefined) {
-         preventVideoSuspendCheckbox.checked = result.preventVideoSuspend;
+         preventVideoSuspendCheckbox.checked = result.preventSuspendIfVideoPaused;
     }
+     // Встановлюємо початковий стан нового чекбокса скріншотів (за замовчуванням true, якщо не задано)
+     if (enableScreenshotsCheckbox) { // Перевіряємо наявність елемента
+        enableScreenshotsCheckbox.checked = result.enableScreenshots !== undefined ? result.enableScreenshots : true;
+     }
 
 
     if (testOption1Checkbox && result.testOption1 !== undefined) testOption1Checkbox.checked = result.testOption1;
@@ -241,9 +265,12 @@ document.addEventListener('DOMContentLoaded', () => {
          // Оновлюємо значення select/checkbox, якщо вони змінилися деінде
          if (suspensionTimeSelect && changes.suspensionTime !== undefined && changes.suspensionTime.newValue !== undefined) suspensionTimeSelect.value = changes.suspensionTime.newValue;
 
-         // Оновлюємо стан нового чекбокса, якщо він змінився деінде
+         // Оновлюємо стан чекбоксів, якщо він змінився деінде
          if (preventVideoSuspendCheckbox && changes.preventVideoSuspendIfVideoPaused !== undefined && changes.preventVideoSuspendIfVideoPaused.newValue !== undefined) {
              preventVideoSuspendCheckbox.checked = changes.preventVideoSuspendIfVideoPaused.newValue;
+         }
+         if (enableScreenshotsCheckbox && changes.enableScreenshots !== undefined && changes.enableScreenshots.newValue !== undefined) {
+              enableScreenshotsCheckbox.checked = changes.enableScreenshots.newValue;
          }
 
 
@@ -299,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                    console.error("Options script: Error clearing URL list:", chrome.runtime.lastError);
               } else {
                   // Рендеримо порожній список після очищення для оновлення UI (включає приховування, якщо список порожній)
-                  if (whitelistUrlsList) renderList(whitelistUrlsList, [], 'url');
+                  // renderList(whitelistUrlsList, [], 'url'); // Цей виклик дублюється через onChanged
                   showStatusMessage(); // Показуємо статус після збереження
               }
           }); // Це викличе слухач onChanged
@@ -318,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
                    console.error("Options script: Error clearing domain list:", chrome.runtime.lastError);
               } else {
                   // Рендеримо порожній список після очищення для оновлення UI (включає приховування, якщо список порожній)
-                   if (whitelistDomainsList) renderList(whitelistDomainsList, [], 'domain');
+                  //  if (whitelistDomainsList) renderList(whitelistDomainsList, [], 'domain'); // Цей виклик дублюється через onChanged
                   showStatusMessage(); // Показуємо статус після збереження
               }
           }); // Це викличе слухач onChanged
@@ -339,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Обробка кліків на нових span'ах перемикача мови
   if (languageToggle && languageOptions.length > 0) {
-      languageOptions.forEach(option => {
+      languageOptions.forEach(option => { // Виправлено: має бути languageOptions.forEach
           option.addEventListener('click', () => {
               const newLang = option.dataset.lang; // Отримуємо код мови з data-атрибута
                // Перевіряємо, чи мова дійсно змінилася
@@ -386,6 +413,13 @@ document.addEventListener('DOMContentLoaded', () => {
            chrome.storage.sync.set({ preventSuspendIfVideoPaused: e.target.checked }, showStatusMessage); // Зберігаємо та показуємо статус
        });
    }
+
+    // ОБРОБКА ЗМІНИ СТАНУ ЧЕКБОКСА enableScreenshots
+    if (enableScreenshotsCheckbox) {
+        enableScreenshotsCheckbox.addEventListener('change', (e) => {
+            chrome.storage.sync.set({ enableScreenshots: e.target.checked }, showStatusMessage); // Зберігаємо та показуємо статус
+        });
+    }
 
 
   // Перевіряємо існування елементів чекбоксів перед додаванням слухачів

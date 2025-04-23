@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       window.applyTheme(theme); // Використовуємо глобальну функцію applyTheme
 
-       // Робимо тіло документа видимим після застосування теми та мови
+       // Робимо тіло документа видимим після завантаження налаштувань та UI
        document.documentElement.style.visibility = 'visible';
 
         // Виконуємо початкове оновлення даних вкладок після завантаження налаштувань та UI
@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Форматування часу до призупинення
     function formatTimeLeft(timeLeft) {
       const t = window.i18nTexts || {}; // Отримуємо локалізовані тексти
-      if (timeLeft < 0) return t.timeNever || 'Never'; // Використовуємо локалізований текст "Ніколи", якщо час від'ємний (це не повинно ставатися з поточною логікою, але як резерв)
+      // Час може бути менше 0, якщо порогу неактивності досягнуто або перевищено
       const secondsTotal = Math.max(0, Math.floor(timeLeft / 1000)); // Забезпечуємо невід'ємний час у секундах
       const minutes = Math.floor(secondsTotal / 60);
       const seconds = secondsTotal % 60;
@@ -145,16 +145,11 @@ document.addEventListener('DOMContentLoaded', () => {
            tabsTableBody.appendChild(row);
 
             // Забезпечуємо обробку видимості стовпця часу навіть у випадку помилки
-            if (response && response.suspensionTime !== undefined) { // Перевіряємо, чи suspensionTime був отриманий, навіть якщо була інша помилка
-                 if (response.suspensionTime <= 0) {
-                     // Якщо авто-призупинення вимкнено, приховуємо стовпець
-                     table.classList.add('no-timer-column');
-                 } else {
-                      // Інакше показуємо стовпець
-                     table.classList.remove('no-timer-column');
-                 }
+            // Перевіряємо, чи були отримані дані для приховування стовпця
+            const showTimerColumn = response?.suspensionTime !== undefined ? response.suspensionTime > 0 : true; // Показуємо за замовчуванням, якщо дані відсутні
+            if (!showTimerColumn) {
+                table.classList.add('no-timer-column');
             } else {
-                 // Якщо ми навіть не змогли отримати suspensionTime, показуємо стовпець за замовчуванням
                  table.classList.remove('no-timer-column');
             }
 
@@ -162,7 +157,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Отримуємо дані з відповіді, включаючи причини, стан відео та інфо призупинених вкладок
-        const { tabs, lastActivity, suspensionTime, suspendedTabInfo, preventSuspendIfVideoPaused } = response; // Отримуємо також налаштування відео
+        // Додаємо enableScreenshots до деструктуризації
+        const { tabs, lastActivity, suspensionTime, suspendedTabInfo, preventSuspendIfVideoPaused, enableScreenshots } = response;
+
 
         tabsTableBody.innerHTML = ''; // Очищаємо тіло таблиці перед заповненням
 
@@ -192,14 +189,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- ПОКРАЩЕННЯ: Використовуємо DocumentFragment для ефективнішого додавання рядків ---
         const fragment = document.createDocumentFragment();
 
-        const ourSuspendUrlPrefix = `chrome-extension://${chrome.runtime.id}/suspend.html`;
+        // Визначаємо, чи потрібно показувати стовпець часу
+        const showTimerColumn = suspensionTime > 0;
+        if (!showTimerColumn) {
+             table.classList.add('no-timer-column'); // Додаємо клас для приховування стовпця
+        } else {
+             table.classList.remove('no-timer-column'); // Видаляємо клас
+        }
+
 
         // Заповнюємо таблицю даними кожної вкладки
         tabs.forEach(tab => {
-          // Визначаємо, чи вкладка є нашою сторінкою призупинення
-          const isOurSuspendedPage = tab.url.startsWith(ourSuspendUrlPrefix);
-          // Отримуємо оригінальну інфо з стану фонового скрипта
-          const originalInfo = suspendedTabInfo ? suspendedTabInfo[tab.id] : undefined;
 
           // Отримуємо ключ причини для цієї вкладки (надіслано фоновим скриптом)
           const reasonKey = tab.reasonKey || 'reasonUnknown'; // Фоновий скрипт додає reasonKey до об'єкта вкладки
@@ -210,11 +210,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
            // Логіка відображення часу до призупинення
-           // Показуємо час лише якщо причина вказує, що вкладка МОЖЕ бути призупинена таймером
-           // Ці причини: Recently Active (reasonBelowThreshold), Ready for suspension (reasonReady)
-           // І авто-призупинення включено, І відео НЕ на паузі (якщо ця опція включена І відео відтворювалося)
-          const reasonsToShowTimer = ['reasonBelowThreshold', 'reasonReady'];
-          let timeLeftDisplay = '-'; // Відображення за замовчуванням
+           // Показуємо час лише якщо стовпець часу visible І причина вказує, що вкладка МОЖЕ бути призупинена таймером
+           const reasonsToShowTimer = ['reasonBelowThreshold', 'reasonReady'];
+           let timeLeftDisplay = showTimerColumn ? '-' : ''; // Відображення за замовчуванням (порожньо, якщо стовпець приховано)
+
 
            // Отримуємо стан відео для розрахунку часу, що залишився, *якщо* це актуально
            const tabVideoState = tab.videoState; // Стан відео тепер включено в об'єкт вкладки з фонового скрипта
@@ -222,8 +221,8 @@ document.addEventListener('DOMContentLoaded', () => {
            const hasPausedVideoBlockingSuspend = preventSuspendIfVideoPaused && tabVideoState?.hasVideo && tabVideoState?.hasPlayed && !tabVideoState?.isPlaying;
 
 
-           // Умова показу таймера використовує hasPausedVideoBlockingSuspend
-           if (reasonsToShowTimer.includes(reasonKey) && suspensionTime > 0 && !hasPausedVideoBlockingSuspend) {
+           // Умова показу таймера використовує hasPausedVideoBlockingSuspend та showTimerColumn
+           if (showTimerColumn && reasonsToShowTimer.includes(reasonKey) && !hasPausedVideoBlockingSuspend) {
                 const lastActive = lastActivity[tab.id] || tab.lastAccessed || 0; // Час останньої активності
                 const inactiveDuration = Date.now() - lastActive; // Тривалість неактивності
                 const minInactiveTime = suspensionTime * 1000; // Мінімальний час неактивності
@@ -238,41 +237,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
           // Визначаємо favicon, URL та Title для відображення
-          let displayFavIconUrl = tab.favIconUrl;
-          let displayUrl = tab.url;
-          let displayTitle = tab.title || t.noTitle || 'No title';
-
-          // Якщо вкладка є нашою сторінкою призупинення, використовуємо оригінальні дані зі suspendedTabInfo
-           if (isOurSuspendedPage && originalInfo) {
-                displayFavIconUrl = originalInfo.favIconUrl || '';
-                displayUrl = originalInfo.url;
-                displayTitle = originalInfo.title || t.noTitle || 'No title';
-           }
-           // Якщо вкладка - наша сторінка призупинення, але originalInfo відсутня, використовуємо поточну інфо.
+          // Використовуємо оригінальний URL та Title, якщо вкладка призупинена
+          const displayFavIconUrl = tab.favIconUrl;
+          const displayUrl = tab.url; // Повний (оригінальний або поточний) URL для title атрибута в Debug
+          const displayTitle = tab.title; // Оригінальний Title з фонового скрипта
 
 
           const row = document.createElement('tr');
-          // Використовуємо скорочений URL для відображення, але повний URL в title для підказки (tooltip)
-          // Використовуємо глобальну функцію escapeHTML для атрибуту title
+          // Використовуємо скорочений URL для відображення (tab.displayUrl)
+          // Використовуємо повний URL для title атрибута (tab.url)
+          // Використовуємо оригінальний Title (tab.title)
+          // reasonText вже локалізований, reasonDetails вже екранований (включаючи деталі про відео та вимкнені скріншоти)
           row.innerHTML = `
             <td>
                ${displayFavIconUrl ? `<img src="${window.escapeHTML(displayFavIconUrl)}" class="favicon" alt="Site Favicon">` : ''}
             </td>
             <td>${tab.id}</td>
-            <td>${window.escapeHTML(displayTitle)}</td>
-            <td class="url-cell" title="${window.escapeHTML(displayUrl)}">${window.shortenUrl(displayUrl)}</td> <!-- Використовуємо глобальну shortenUrl -->
-            <td class="time-left-cell">${timeLeftDisplay}</td> <!-- Додаємо клас для потенційного приховування -->
-            <!-- Використовуємо reasonDetails, якщо є, замість будування вручну -->
-            <td>${window.escapeHTML(reasonText)}${window.escapeHTML(reasonDetails)}</td>
+            <td>${window.escapeHTML(displayTitle || (t.noTitle || 'No title'))}</td> <!-- Екрануємо Title -->
+            <td class="url-cell" title="${window.escapeHTML(displayUrl)}">${tab.displayUrl}</td> <!-- displayUrl вже екранований та скорочений -->
+            <td class="time-left-cell">${timeLeftDisplay}</td>
+            <!-- reasonText вже локалізований, reasonDetails вже екранований -->
+            <td>${window.escapeHTML(reasonText)}${tab.reasonDetails}</td>
           `;
           fragment.appendChild(row); // Додаємо рядок до DocumentFragment
-
-
-          // Додаємо обробники помилок для favicon після додавання рядків до DOM
-          // Це буде працювати після того, як fragment буде додано до tbody
-          // Можливо, ефективніше додати ці обробники після fragment.appendChild(row);
-          // або навіть після додавання fragment до tbody.
-          // Додамо їх після додавання fragment до tbody.
         });
 
         // Додаємо всі рядки з DocumentFragment до tbody за одну операцію
@@ -292,11 +279,16 @@ document.addEventListener('DOMContentLoaded', () => {
         status.style.opacity = 1; // Робимо статус видимим
 
          // Приховуємо/показуємо заголовок стовпця часу та комірки, використовуючи CSS клас на таблиці
+         // Цю логіку вже виконано вище, але можна повторити для ясності, хоча це дублювання
          if (suspensionTime <= 0) { // Якщо авто-призупинення вимкнено
-            table.classList.add('no-timer-column');
+             table.classList.add('no-timer-column');
          } else {
-            table.classList.remove('no-timer-column');
+             table.classList.remove('no-timer-column');
          }
+
+         // Можливо, додати інформацію про стан enableScreenshots на панель статусу?
+         // status.textContent += ` (Screenshots: ${enableScreenshots ? 'Enabled' : 'Disabled'})`;
+         // Це вже реалізовано як reasonDetails в таблиці.
 
       });
     }
