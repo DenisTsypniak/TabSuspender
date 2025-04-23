@@ -1,0 +1,846 @@
+/* Загальні стилі */
+:root {
+  --bg-light: #f4f7f6; /* Lighter background */
+  --bg-dark: #1e2124; /* Slightly less harsh dark background */
+
+  --text-light: #212529; /* Darker text for light mode */
+  --text-dark: #e9ecef; /* Lighter text for dark mode */
+
+  --card-bg-light: #ffffff;
+  --card-bg-dark: #2c3e50; /* Darker card background */
+
+  --right-column-bg-light: #e9ecef; /* Light background for whitelist (now applied to inner section) */
+  --right-column-bg-dark: #34495e; /* Dark background for whitelist (now applied to inner section) */
+
+  --settings-section-bg-light: #e9ecef; /* New: background for settings sections */
+  --settings-section-bg-dark: #34495e; /* New: background for settings sections in dark mode */
+
+  --select-bg-light: #ffffff;
+  --select-bg-dark: #3b59b6; /* Darker select background, adjusted slightly */
+  --select-border-light: #ced4da; /* Light border */
+  --select-border-dark: #5f7f9d; /* Dark border */
+
+  --border-light: #dee2e6; /* General border color */
+  --border-dark: #495e74;
+
+  --warning-bg: #dc3545;
+  --warning-bg-dark: #c0392b; /* Slightly different dark warning */
+  --warning-text: white;
+
+  --delete-color: #dc3545;
+  --delete-color-dark: #e74c3c; /* Different delete color */
+  --delete-hover: #c82333;
+  --delete-hover-dark: #c0392b;
+
+  --status-text-light: #28a745; /* Success green */
+  --status-text-dark: #2ecc71;
+
+  --button-blue-light: #007bff; /* Standard blue */
+  --button-blue-dark: #3498db; /* Lighter blue for dark */
+  --button-blue-hover-light: #0056b3;
+  --button-blue-hover-dark: #2980b9;
+
+   --button-purple-light: #6f42c1; /* Bootstrap purple */
+  --button-purple-dark: #9b59b6; /* Lighter purple for dark */
+  --button-purple-hover-light: #5631a8;
+  --button-purple-hover-dark: #8e44ad;
+
+  --button-orange-light-light: #fd7e14; /* Bootstrap orange */
+  --button-orange-light-dark: #f39c12; /* Lighter orange for dark */
+  --button-orange-light-hover-light: #e06c0d;
+  --button-orange-light-hover-dark: #e67e22;
+
+   --button-orange-dark-light: #d2691e; /* Chocolate from before */
+   --button-orange-dark-dark: #d35400; /* Peter River orange */
+  --button-orange-dark-hover-light: #b85b1a;
+   --button-orange-dark-hover-dark: #e67e22; /* Same as orange-light dark hover */
+
+  --button-gray-light: #6c757d; /* Bootstrap secondary */
+  --button-gray-dark: #7f8c8d; /* Asbestos */
+  --button-gray-hover-light: #5a6268;
+  --button-gray-hover-dark: #95a5a6; /* Clouds */
+
+  --button-red-light: #dc3545; /* Bootstrap danger */
+  --button-red-dark: #e74c3c; /* Alizarin */
+  --button-red-hover-light: #c82333;
+  --button-red-hover-dark: #c0392b; /* Pomegranate */
+}
+
+/* Prevent FOUC */
+html {
+    visibility: hidden;
+}
+
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  transition: background-color 0.3s, color 0.3s;
+  width: 100%;
+  min-height: 100vh; /* Забезпечуємо, що body займає всю висоту */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Вирівнюємо елементи по верхньому краю */
+  box-sizing: border-box; /* Включаємо padding в розрахунок ширини */
+  /* Встановлюємо мінімальну ширину та висоту для popup body */
+  min-width: 350px; /* Збільшуємо мінімальну ширину */
+  min-height: 300px; /* Забезпечуємо достатню висоту */
+}
+/* Для popup body, центруюємо картку по вертикалі */
+.popup-wrapper {
+    align-items: center; /* Центруємо картку вертикально в popup */
+}
+
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+body.light {
+  background-color: var(--bg-light);
+  color: var(--text-light);
+}
+
+body.dark {
+  background-color: var(--bg-dark);
+  color: var(--text-dark);
+}
+
+/* Стилі обгорток для центрування та відступів */
+.options-wrapper,
+.popup-wrapper, /* Застосовуємо align-items: center тільки тут */
+.suspend-wrapper,
+.debug-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+  min-height: 100vh; /* Забезпечуємо, що обгортка займає всю висоту */
+  overflow-y: auto; /* Дозволяємо прокрутку, якщо контент виходить за межі */
+}
+/* Вирівнювання по верхньому краю для не-popup обгорток */
+.options-wrapper, .suspend-wrapper, .debug-wrapper {
+    align-items: flex-start;
+}
+
+
+/* Стилі карток - Уніфіковані */
+.card {
+  background: var(--card-bg-light);
+  border-radius: 12px; /* Трохи менший радіус */
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1); /* Уточнена тінь */
+  text-align: center;
+  padding: 25px; /* Послідовні відступи */
+  width: 100%;
+  animation: fadeIn 0.5s ease-in;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+body.dark .card {
+  background: var(--card-bg-dark);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+  color: var(--text-dark);
+}
+
+/* Максимальна ширина для різних типів карток */
+.popup-card { max-width: 350px; } /* Збільшено ширину для popup */
+.options-card { max-width: 650px; }
+.suspend-card { max-width: 400px; }
+.debug-card { max-width: 900px; } /* Збільшено ширину для адмін-панелі */
+
+/* Іконка теми (або загальна іконка картки) */
+.icon {
+  font-size: 2.5rem; /* Трохи менша іконка */
+  margin-bottom: 1rem;
+  color: var(--button-blue-light); /* Використовуємо змінну кольору */
+  display: block;
+}
+
+body.dark .icon {
+  color: var(--button-blue-dark);
+}
+
+/* Заголовок всередині картки */
+.card h1 {
+  font-size: 1.5rem; /* Трохи менший заголовок */
+  margin-bottom: 0.75rem;
+  color: var(--text-light); /* Використовуємо змінну кольору */
+  font-weight: 700;
+}
+
+body.dark .card h1 {
+  color: var(--text-dark);
+}
+
+/* ==== Стилі сторінки призупинення ==== */
+.suspend-card .suspend-header-block { /* Container for icon and title */
+    display: flex; /* Use flexbox for alignment */
+    align-items: center; /* Vertically center items */
+    justify-content: center; /* Center the entire block in the card */
+    margin-bottom: 0.75rem;
+    width: 100%;
+    padding: 0 10px;
+    box-sizing: border-box;
+    /* text-align: center; /* Center content if it wraps - це не потрібно, flex center робить це */
+}
+
+/* Container to group the icon and title */
+/* Цей клас було видалено з HTML, тому цей блок CSS теж не потрібен */
+/* .suspend-card .title-group { ... } */
+
+/* Style for the suspended tab title text element */
+.suspend-card .suspended-title {
+   font-size: 1.5rem;
+   font-weight: 700;
+   color: var(--text-light);
+   margin: 0; /* Remove margin */
+   margin-left: 10px; /* Space between icon and title */
+   /* ### ЗМІНЕНО: Видалено flex-grow, flex-shrink, text-align ### */
+   /* Allow title to take up available space but shrink if needed */
+   /* flex-grow: 1; */
+   /* flex-shrink: 1; */
+   /* text-align: left; /* Align text to the left within its container */
+   word-break: break-word;
+   /* Optional: Ensure title doesn't overflow by limiting width */
+   /* max-width: calc(100% - 44px); /* Adjust based on icon size + margin */
+}
+body.dark .suspend-card .suspended-title {
+  color: var(--text-dark);
+}
+
+/* Icon styling */
+.suspend-card .suspend-header-block .favicon {
+     width: 24px;
+     height: 24px;
+     display: block;
+     flex-shrink: 0; /* Prevent icon from shrinking */
+}
+/* ==== Кінець стилів сторінки призупинення ==== */
+
+
+/* Повідомлення про статус */
+.status-message {
+    font-weight: bold;
+    margin-top: 10px; /* Додаємо простір над статусом */
+    min-height: 1em; /* Резервуємо простір, навіть якщо порожній */
+    opacity: 0; /* Початково приховано */
+    transition: opacity 0.3s ease-in-out;
+}
+body.light .status-message { color: var(--status-text-light); }
+body.dark .status-message { color: var(--status-text-dark); }
+
+
+/* Стилі кнопок - Уніфіковані та використовують змінні */
+button.btn {
+  display: block;
+  width: 100%;
+  padding: 10px 15px; /* Більше відступів */
+  margin-bottom: 8px; /* Більше простору між кнопками */
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem; /* Трохи менший шрифт */
+  font-weight: 600;
+  cursor: pointer;
+  color: white;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+  text-align: center; /* Забезпечуємо центрування тексту */
+}
+
+button.btn:last-child {
+    margin-bottom: 0; /* Без нижнього відступу для останньої кнопки */
+}
+
+
+/* Специфічні кольори кнопок */
+.btn.blue { background-color: var(--button-blue-light); }
+body.dark .btn.blue { background-color: var(--button-blue-dark); }
+.btn.blue:hover { background-color: var(--button-blue-hover-light); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); }
+body.dark .btn.blue:hover { background-color: var(--button-blue-hover-dark); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); }
+
+.btn.purple { background-color: var(--button-purple-light); }
+body.dark .btn.purple { background-color: var(--button-purple-dark); }
+.btn.purple:hover { background-color: var(--button-purple-hover-light); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); }
+body.dark .btn.purple:hover { background-color: var(--button-purple-hover-dark); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); }
+
+.btn.orange-light { background-color: var(--button-orange-light-light); }
+body.dark .btn.orange-light { background-color: var(--button-orange-light-dark); }
+.btn.orange-light:hover { background-color: var(--button-orange-light-hover-light); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); }
+body.dark .btn.orange-light:hover { background-color: var(--button-orange-light-hover-dark); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); }
+
+.btn.orange-dark { background-color: var(--button-orange-dark-light); }
+body.dark .btn.orange-dark { background-color: var(--button-orange-dark-dark); }
+.btn.orange-dark:hover { background-color: var(--button-orange-dark-hover-light); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); }
+body.dark .btn.orange-dark:hover { background-color: var(--button-orange-dark-hover-dark); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); }
+
+.btn.gray { background-color: var(--button-gray-light); }
+body.dark .btn.gray { background-color: var(--button-gray-dark); }
+.btn.gray:hover { background-color: var(--button-gray-hover-light); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); }
+body.dark .btn.gray:hover { background-color: var(--button-gray-hover-dark); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); }
+
+.btn.red { background-color: var(--button-red-light); }
+body.dark .btn.red { background-color: var(--button-red-dark); }
+.btn.red:hover { background-color: var(--button-red-hover-light); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); }
+body.dark .btn.red:hover { background-color: var(--button-red-hover-dark); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); }
+
+
+/* Конкретні кнопки */
+.restore-button { margin-top: 1.5rem; } /* Додаємо простір над кнопкою відновлення */
+
+
+/* Група кнопок для Popup */
+.button-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* Простір між кнопками */
+}
+.popup-card .btn {
+    margin-bottom: 0; /* Видаляємо індивідуальні відступи всередині групи */
+}
+
+/* Специфічні стилі для сторінки налаштувань */
+.options-card .button-wrapper.top-button-wrapper {
+    margin-bottom: 20px; /* Простір під кнопкою відладки */
+    width: 100%; /* Робимо обгортку кнопки на всю ширину */
+}
+.options-card .button-wrapper.top-button-wrapper .btn {
+    margin-bottom: 0; /* Видаляємо стандартний відступ кнопки */
+}
+
+
+.columns {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  gap: 20px; /* Простір між колонками */
+}
+
+/* Дозволяємо колонкам переноситися на менших екранах */
+@media (max-width: 600px) {
+    .columns {
+        flex-direction: column;
+        gap: 0; /* Видаляємо простір при стекуванні */
+    }
+    .left-column,
+    .right-column {
+        flex-basis: auto; /* Дозволяємо колонкам займати всю ширину */
+        width: 100%;
+    }
+     .right-column {
+        margin-top: 20px; /* Додаємо простір між стекованими колонками */
+     }
+}
+
+
+.column {
+  display: flex;
+  flex-direction: column;
+  padding: 0; /* Видаляємо відступи колонок, додаємо відступи всередині елементів */
+  flex-grow: 1;
+  gap: 20px; /* Простір між секціями всередині колонки */
+}
+
+.left-column {
+  flex-basis: 250px; /* Базова ширина для лівої колонки */
+  flex-shrink: 0; /* Забороняємо стиснення */
+}
+
+/* Новий контейнер для секцій налаштувань */
+.settings-section {
+    background-color: var(--settings-section-bg-light);
+    border-radius: 8px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+    padding: 15px;
+    border: 1px solid var(--border-light);
+    margin-bottom: 0; /* Видаляємо margin-bottom з секцій, використовуємо gap в column */
+    width: 100%; /* Займає всю ширину колонки */
+    box-sizing: border-box;
+    /* Додаємо gap для простору між settings-item всередині секції */
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Відступ між елементами налаштувань всередині секції */
+}
+body.dark .settings-section {
+  background-color: var(--settings-section-bg-dark);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  border-color: var(--border-dark);
+}
+/* Видаляємо нижній відступ в останній секції, якщо їх кілька */
+/*.column .settings-section:last-child {
+    margin-bottom: 0;
+}*/
+
+
+.right-column {
+  flex-basis: 300px; /* Базова ширина для правої колонки */
+  flex-grow: 1;
+  align-items: stretch; /* Розтягуємо елементи, щоб заповнити колонку */
+  /* Ці стилі тепер перенесено на inner settings-section */
+  padding: 0; /* Видаляємо padding з right-column */
+  border: none; /* Видаляємо border з right-column */
+  box-shadow: none; /* Видаляємо box-shadow з right-column */
+   background-color: transparent; /* Прозорий фон для right-column */
+   /* Додаємо gap для простору між settings-section в правій колонці */
+    gap: 20px;
+    display: flex; /* Right column is also a flex container for its sections */
+    flex-direction: column;
+}
+body.dark .right-column {
+  /* Ці стилі тепер перенесено на inner settings-section */
+   background-color: transparent; /* Прозорий фон для right-column */
+}
+
+/* Стилі для елементів всередині settings-section */
+.settings-item {
+  margin-bottom: 0; /* Видаляємо margin-bottom, використовуємо gap в settings-section */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+}
+/* Видаляємо нижній відступ для останнього елемента в секції - тепер це робить gap */
+/*.settings-section .settings-item:last-child {
+    margin-bottom: 0;
+}*/
+
+label {
+  font-weight: 600;
+  margin-bottom: 6px; /* Більше простору під міткою */
+  display: block; /* Забезпечуємо, що мітка займає всю ширину */
+}
+
+/* Стилі для елементів з чекбоксами */
+.settings-item.checkbox-item {
+    flex-direction: row; /* Розташовуємо мітку та чекбокс в рядок */
+    align-items: center;
+    margin-bottom: 0; /* Менше простору для елементів з чекбоксами, використовуємо gap секції */
+    gap: 10px; /* Простір між чекбоксом та міткою */
+}
+
+.settings-item.checkbox-item input[type="checkbox"] {
+    flex-shrink: 0; /* Забороняємо стиснення чекбокса */
+    width: 16px; /* Стандартний розмір */
+    height: 16px; /* Стандартний розмір */
+}
+
+.settings-item.checkbox-item label {
+    margin-bottom: 0; /* Видаляємо нижній відступ */
+    font-weight: normal; /* Менш жирний шрифт для міток чекбоксів */
+    cursor: pointer; /* Вказуємо, що це клікабельний елемент */
+}
+
+select {
+  padding: 10px; /* Більше відступів */
+  border-radius: 6px;
+  border: 1px solid var(--select-border-light);
+  font-size: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--select-bg-light);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+select:focus {
+    outline: none;
+    border-color: var(--button-blue-light);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+body.dark select {
+  background-color: var(--select-bg-dark);
+  color: var(--text-dark);
+  border: 1px solid var(--select-border-dark);
+}
+body.dark select:focus {
+     border-color: var(--button-blue-dark);
+     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.3);
+}
+
+
+/* ==== Стилі перемикача теми ==== */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    width: 80px; /* Фіксована ширина перемикача */
+    height: 34px; /* Фіксована висота перемикача */
+    background-color: var(--select-bg-light); /* Фон перемикача */
+    border: 1px solid var(--select-border-light); /* Межа перемикача */
+    border-radius: 17px; /* Округлені краї */
+    overflow: hidden; /* Приховуємо все, що виходить за межі */
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s;
+    position: relative; /* Для позиціонування рухомого індикатора */
+}
+
+body.dark .theme-toggle {
+    background-color: var(--select-bg-dark);
+    border-color: var(--select-border-dark);
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 1; /* Рівна ширина для обох частин */
+    height: 100%;
+    font-size: 1.2rem; /* Розмір іконок */
+    opacity: 0.5; /* Неактивна іконка менш видима */
+    transition: opacity 0.3s, color 0.3s;
+    z-index: 1; /* Розміщуємо над індикатором */
+}
+
+.theme-option.active {
+    opacity: 1; /* Активна іконка повністю видима */
+    color: var(--text-light); /* Колір активної іконки (можна змінити) */
+}
+
+body.dark .theme-option.active {
+     color: var(--text-dark); /* Колір активної іконки в темній темі */
+}
+
+/* Рухомий індикатор активної теми */
+.theme-toggle::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(50% - 3px); /* Ширина половини перемикача мінус відступи */
+    height: calc(100% - 4px); /* Висота мінус відступи */
+    background-color: var(--card-bg-light); /* Колір індикатора */
+    border-radius: 15px; /* Округлений індикатор */
+    transition: transform 0.3s ease-in-out, background-color 0.3s;
+    z-index: 0; /* Розміщуємо під іконками */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+body.dark .theme-toggle::before {
+    background-color: var(--card-bg-dark);
+     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* Позиціонування індикатора для темної теми */
+.theme-toggle[data-theme="dark"]::before {
+    transform: translateX(calc(100% + 2px)); /* Переміщуємо вправо */
+}
+
+/* Позиціонування індикатора для світлої теми (за замовчуванням) */
+.theme-toggle[data-theme="light"]::before {
+    transform: translateX(0);
+}
+/* ==== Кінець стилів перемикача теми ==== */
+
+
+/* ==== Стилі перемикача мови ==== */
+.language-toggle {
+    display: flex;
+    align-items: center;
+    width: 100px; /* Зменшена фіксована ширина */
+    height: 34px; /* Висота як у перемикача теми */
+    background-color: var(--select-bg-light);
+    border: 1px solid var(--select-border-light);
+    border-radius: 6px; /* Менш округлений, як select */
+    overflow: hidden;
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s;
+    /* removed position: relative; */
+}
+
+body.dark .language-toggle {
+    background-color: var(--select-bg-dark);
+    border-color: var(--select-border-dark);
+}
+
+.language-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 1; /* Рівна ширина для обох частин */
+    padding: 0 10px; /* Зменшені внутрішні відступи */
+    height: 100%;
+    font-size: 1rem; /* Розмір шрифту */
+    font-weight: 600;
+    color: var(--text-light); /* Колір тексту */
+    background-color: transparent; /* Прозорий фон за замовчуванням */
+    transition: color 0.2s, background-color 0.2s;
+     /* Додаємо межу між опціями, крім останньої */
+    border-right: 1px solid var(--select-border-light);
+}
+
+body.dark .language-option {
+    color: var(--text-dark);
+     border-right-color: var(--select-border-dark);
+}
+
+.language-option:last-child {
+    border-right: none; /* Видаляємо межу в останнього елемента */
+}
+
+.language-option.active {
+    /* Стилі активної опції */
+    background-color: var(--button-blue-light); /* Колір активного фону */
+    color: white; /* Колір тексту активної опції */
+}
+
+body.dark .language-option.active {
+    background-color: var(--button-blue-dark);
+    color: white;
+}
+
+/* Ховер ефект */
+.language-option:not(.active):hover {
+    background-color: rgba(0,0,0,0.05); /* Легкий фон при ховері */
+}
+body.dark .language-option:not(.active):hover {
+     background-color: rgba(255,255,255,0.05);
+}
+
+/* ==== Кінець стилів перемикача мови ==== */
+
+
+/* Повідомлення про попередження */
+.warning {
+  background-color: var(--warning-bg);
+  color: var(--warning-text);
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px; /* Більше простору під попередженням */
+  font-size: 0.9rem;
+  width: 100%;
+  text-align: center;
+  display: none; /* Обробляється JS */
+}
+
+body.dark .warning {
+  background-color: var(--warning-bg-dark);
+}
+
+/* Стилі списків білого списку */
+.whitelist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 15px 0; /* Більше простору під списком */
+  width: 100%;
+  max-height: 200px; /* Обмежуємо висоту */
+  overflow-y: auto; /* Додаємо смугу прокрутки */
+  border: 1px solid var(--border-light); /* Межа списку */
+  border-radius: 6px;
+  background-color: var(--card-bg-light); /* Фон списку */
+  padding: 5px; /* Внутрішні відступи */
+  box-sizing: border-box;
+   flex-grow: 1; /* Дозволяємо списку займати доступний простір */
+}
+body.dark .whitelist {
+    border-color: var(--border-dark);
+    background-color: var(--select-bg-dark); /* Фон списку в темній темі */
+}
+
+/* == Приховуємо список, якщо він порожній == */
+.whitelist:empty {
+    display: none;
+}
+
+/* Стиль для скороченого тексту URL у списку білого списку */
+.whitelist li .whitelist-url-text {
+    word-break: break-all; /* Забезпечуємо перенос довгих URL */
+}
+
+
+.whitelist li {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  background-color: var(--bg-light); /* Використовуємо світлий фон для елементів */
+  border-radius: 4px; /* Менший радіус для елементів списку */
+  margin-bottom: 5px; /* Простір між елементами */
+  font-size: 0.9rem; /* Менший шрифт */
+  word-break: break-all; /* Це вже є, але уточнимо для text span */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03); /* Легка тінь */
+  border: 1px solid var(--border-light); /* Межа елемента */
+}
+body.dark .whitelist li {
+    background-color: var(--card-bg-dark); /* Використовуємо темний фон картки для елементів */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    border-color: var(--border-dark);
+}
+
+.whitelist li:last-child {
+    margin-bottom: 0;
+}
+
+
+.whitelist li .number {
+  min-width: 20px;
+  font-weight: bold;
+  margin-right: 8px; /* Простір після номера */
+  flex-shrink: 0; /* Забороняємо стиснення номера */
+}
+.whitelist li .text {
+  flex-grow: 1; /* Дозволяємо тексту займати доступний простір */
+  overflow: hidden; /* Приховуємо зайвий текст, якщо він не переноситься */
+  /* word-break: break-all; /* Це вже є, але може бути потрібне тут теж */
+}
+
+.whitelist li .delete {
+  background: none;
+  border: none;
+  color: var(--delete-color);
+  font-size: 1rem; /* Стандартний розмір іконки */
+  cursor: pointer;
+  padding: 0 4px; /* Горизонтальні відступи */
+  line-height: 1;
+  transition: color 0.2s ease;
+  flex-shrink: 0; /* Забороняємо стиснення кнопки видалення */
+}
+
+.whitelist li .delete:hover {
+  color: var(--delete-hover);
+}
+
+body.dark .whitelist li .delete {
+  color: var(--delete-color-dark);
+}
+
+body.dark .whitelist li .delete:hover {
+  color: var(--delete-hover-dark);
+}
+
+/* Кнопки очищення списків */
+button.clear-list {
+  width: auto; /* Дозволяємо кнопці мати ширину за вмістом */
+  padding: 8px 15px; /* Менші відступи для кнопок очищення */
+  font-size: 0.9rem;
+  align-self: flex-start; /* Вирівнюємо кнопку по лівому краю */
+  margin-top: 10px; /* Додаємо простір над кнопкою */
+}
+
+/* Стилі таблиці відладки */
+.debug-card .table-container { /* Контейнер для прокрутки */
+    width: 100%;
+    overflow-x: auto; /* Додаємо горизонтальну смугу прокрутки, якщо потрібно */
+    margin-bottom: 20px;
+}
+
+.debug-card table {
+  width: 100%; /* Забезпечуємо, що таблиця використовує ширину контейнера */
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0; /* Видаляємо відступи */
+  font-size: 0.9rem; /* Менший шрифт для щільних даних */
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  min-width: 850px; /* Збільшено мінімальну ширину для нового стовпця */
+}
+
+.debug-card th, .debug-card td {
+  border: 1px solid var(--border-light); /* Додаємо межі */
+  padding: 10px; /* Послідовні відступи */
+  text-align: left;
+  transition: background-color 0.2s ease;
+  word-break: break-word; /* Дозволяємо перенос тексту в комірках */
+}
+body.dark .debug-card th, body.dark .debug-card td {
+    border-color: var(--border-dark);
+}
+
+.debug-card th {
+  background-color: #e6e6e6;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid var(--border-light); /* Товща нижня межа для заголовка */
+}
+
+body.dark .debug-card th {
+  background-color: #404040;
+  color: var(--text-dark);
+  border-bottom-color: var(--border-dark);
+}
+
+.debug-card td {
+  background-color: var(--card-bg-light); /* Використовуємо фон картки для комірок */
+}
+
+body.dark .debug-card td {
+  background-color: var(--card-bg-dark);
+}
+
+.debug-card tr:nth-child(even) td {
+  background-color: var(--right-column-bg-light); /* Використовуємо фон елемента списку для парних рядків */
+}
+body.dark .debug-card tr:nth-child(even) td {
+  background-color: var(--right-column-bg-dark);
+}
+
+.debug-card tr:hover td {
+  background-color: #f0f0f0; /* Світліше при наведенні */
+}
+body.dark .debug-card tr:hover td {
+  background-color: #3a3a3a;
+}
+
+/* Специфічна ширина та стилі для стовпців таблиці відладки */
+.debug-card td:nth-child(1) { width: 30px; text-align: center; } /* Іконка */
+.debug-card th:nth-child(2), .debug-card td:nth-child(2) { width: 60px; } /* ID */
+.debug-card th:nth-child(3), .debug-card td:nth-child(3) { min-width: 150px; } /* Назва */
+.debug-card td.url-cell { /* Стиль для комірки URL */
+  max-width: 300px; /* Обмежена ширина для URL */
+  word-break: break-all; /* Забезпечуємо перенос довгих URL */
+}
+.debug-card th:nth-child(5), .debug-card td:nth-child(5) { width: 100px; } /* Час до призупинення */
+.debug-card th:nth-child(6), .debug-card td:nth-child(6) { width: 180px; } /* Причина */
+
+
+/* == HIDE DEBUG TIMER COLUMN == */
+/* This rule hides the 5th column (Time to suspend) when the table has the class 'no-timer-column' */
+.debug-card table.no-timer-column th:nth-child(5),
+.debug-card table.no-timer-column td:nth-child(5) {
+    display: none;
+}
+
+
+/* Стилі іконки сайту (favicon) */
+.favicon {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle; /* Вирівнювання по вертикалі */
+    border-radius: 2px; /* Невелике заокруглення */
+    object-fit: contain; /* Зберігаємо пропорції */
+}
+
+
+/* Місце для майбутньої реалізації скріншота */
+#futureScreenshotPlaceholder {
+  width: 100%;
+  min-height: 150px;
+  border: 1px dashed var(--border-light);
+  border-radius: 8px;
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-style: italic;
+  color: #999;
+  box-sizing: border-box;
+  background-color: rgba(0,0,0,0.02);
+  font-size: 0.9rem;
+  flex-shrink: 0; /* Prevent shrinking in flex layout */
+}
+body.dark #futureScreenshotPlaceholder {
+    border-color: var(--border-dark);
+    background-color: rgba(255,255,255,0.05);
+    color: #aaa;
+}
+#futureScreenshotPlaceholder:empty:before { /* Add text only if the element is empty */
+    content: "Місце для майбутнього скріншота";
+    display: block;
+}

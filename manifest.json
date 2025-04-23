@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Suspender",
+  "version": "1.0",
+  "description": "Призупиняє неактивні вкладки для економії пам'яті, натхненний The Great Suspender.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["suspend.html", "styles.css", "suspend.js", "debug.html", "utils.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

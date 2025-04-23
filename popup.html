@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="uk"> <!-- lang attribute will be updated by JS -->
+<head>
+  <meta charset="UTF-8">
+  <title data-i18n="popupTitle">Tab Suspender</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="light"> <!-- Class will be updated by JS -->
+  <main class="popup-wrapper">
+    <div class="card popup-card">
+      <div class="icon">⏳</div> <!-- Changed icon to something more general -->
+      <h1 class="title" data-i18n="popupTitle">Tab Suspender</h1>
+
+      <!-- Warning message - text is set by JS, localized via global i18nTexts -->
+      <div id="warning" class="warning">⚠️ Цю сторінку неможливо призупинити</div>
+
+      <div class="button-group"> <!-- Group buttons -->
+        <button id="suspendCurrent" class="btn blue" data-i18n="suspendCurrent">🎯 Призупинити поточну</button>
+        <button id="suspendAll" class="btn purple" data-i18n="suspendAll">🌀 Призупинити всі фонові</button>
+        <button id="whitelistUrl" class="btn orange-light" data-i18n="whitelistUrl">➕ URL у винятки</button>
+        <button id="whitelistDomain" class="btn orange-dark" data-i18n="whitelistDomain">🌐 Домен у винятки</button>
+        <button id="openSettings" class="btn gray" data-i18n="openSettings">⚙️ Налаштування</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- utils.js MUST be loaded before popup.js -->
+  <script src="utils.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

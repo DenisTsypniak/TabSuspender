@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="optionsTitle">Налаштування Призупинення вкладок</title>
+  <link rel="stylesheet" href="styles.css?v=1.8"> <!-- Оновлена версія CSS -->
+</head>
+<body class="light"> <!-- Клас буде оновлено за допомогою JS -->
+  <main class="options-wrapper">
+    <div class="card options-card">
+      <div class="icon">⚙️</div> <!-- Використовуємо іконку налаштувань -->
+      <h1 data-i18n="optionsTitle">Налаштування Призупинення вкладок</h1>
+
+      <div class="button-wrapper top-button-wrapper">
+        <button id="openDebugPanel" class="btn blue" data-i18n="openDebugPanel">🛠️ Адмін-панель відладки</button>
+      </div>
+
+      <div class="columns">
+        <div class="column left-column">
+          <!-- Загальні налаштування - загорнуто у новий контейнер settings-section -->
+          <div class="settings-section">
+              <div class="settings-item">
+                <label for="suspensionTime" data-i18n="suspensionLabel">Призупиняти вкладки після:</label>
+                <select id="suspensionTime">
+                  <option value="-1" data-i18n="timeNever">Ніколи</option>
+                  <option value="60" data-i18n="time1Minute">1 хвилина</option>
+                  <option value="300" data-i18n="time5Minutes">5 хвилин</option>
+                  <option value="600" data-i18n="time10Minutes" selected>10 хвилин</option>
+                  <option value="1800" data-i18n="time30Minutes">30 хвилин</option>
+                  <option value="3600" data-i18n="time1Hour">1 година</option>
+                  <option value="86400" data-i18n="time1Day">1 день</option>
+                  <option value="604800" data-i18n="time1Week">1 тиждень</option>
+                </select>
+              </div>
+
+              <div class="settings-item">
+                <label data-i18n="languageLabel">Мова:</label>
+                 <!-- Блок для перемикача мови -->
+                 <div id="languageToggle" class="language-toggle">
+                     <!-- Використовуємо текстові мітки, оскільки іконки прапорів можуть некоректно відображатись -->
+                     <span class="language-option" data-lang="uk" data-i18n="languageUkrainianShort">Укр</span>
+                     <span class="language-option" data-lang="en" data-i18n="languageEnglishShort">Eng</span>
+                 </div>
+              </div>
+
+              <div class="settings-item">
+                <label data-i18n="themeLabel">Тема:</label>
+                 <!-- Блок для перемикача теми -->
+                 <div class="theme-toggle">
+                     <span id="lightThemeToggle" class="theme-option" data-theme="light" title="Світла тема">🌞</span>
+                     <span id="darkThemeToggle" class="theme-option" data-theme="dark" title="Темна тема">🌙</span>
+                 </div>
+              </div>
+
+              <!-- Нова опція: Не призупиняти, якщо відео на паузі -->
+               <div class="settings-item checkbox-item">
+                   <input type="checkbox" id="preventVideoSuspend">
+                   <label for="preventVideoSuspend" data-i18n="preventVideoSuspendLabel">Не призупиняти, якщо відео на паузі</label>
+               </div>
+
+              <!-- НОВА ОПЦІЯ: Увімкнути скріншоти на сторінці призупинення -->
+              <div class="settings-item checkbox-item">
+                   <input type="checkbox" id="enableScreenshots">
+                   <label for="enableScreenshots" data-i18n="enableScreenshotsLabel">Показувати скріншоти на сторінці призупинення</label>
+              </div>
+
+
+              <!-- Приклади тестових опцій, якщо вони є в налаштуваннях -->
+              <!--
+              <div class="settings-item checkbox-item">
+                <input type="checkbox" id="testOption1">
+                <label for="testOption1" data-i18n="testOption1Label">Тестова опція 1</label>
+              </div>
+
+              <div class="settings-item checkbox-item">
+                <input type="checkbox" id="testOption2">
+                <label for="testOption2" data-i18n="testOption2Label">Тестова опція 2</label>
+              </div>
+              -->
+          </div>
+        </div>
+
+        <div class="column right-column">
+          <!-- Білий список URL - обгорнуто в settings-section -->
+          <div class="settings-section">
+              <div class="settings-item">
+                <label data-i18n="whitelistUrlsLabel">Білий список URL:</label>
+                <ul id="whitelistUrls" class="whitelist"></ul>
+                <button id="clearUrls" class="clear-list btn red" data-i18n="clearListButton">Очистити список</button>
+              </div>
+          </div>
+
+          <!-- Білий список доменів - обгорнуто в settings-section -->
+          <div class="settings-section">
+              <div class="settings-item">
+                <label data-i18n="whitelistDomainsLabel">Білий список доменів:</label>
+                <ul id="whitelistDomains" class="whitelist"></ul>
+                <button id="clearDomains" class="clear-list btn red" data-i18n="clearListButton">Очистити список</button>
+              </div>
+          </div>
+        </div>
+      </div>
+       <p id="status" class="subtitle status-message"></p> <!-- Статус переміщено всередину картки -->
+    </div>
+  </main>
+
+  <script src="utils.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
