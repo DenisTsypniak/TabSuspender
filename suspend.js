@@ -39,24 +39,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Кінець функції sendMessageWithRetry ---
 
 
-    // Отримуємо посилання на елементи для скріншоту та контейнер
-    const suspendContainer = document.querySelector('.suspend-container'); // Новий контейнер
+    // Отримуємо посилання на елементи DOM
+    const suspendPageContainer = document.getElementById('suspendPageContainer'); // Головний контейнер
+    const suspendCard = document.getElementById('suspendCard'); // Картка з інформацією та кнопкою (НОВИЙ ID)
+    const screenshotContainer = document.getElementById('screenshotContainer'); // Контейнер скріншоту
     const screenshotImg = document.getElementById('screenshotImg'); // Елемент для зображення скріншоту
     const screenshotUnavailable = document.getElementById('screenshotUnavailable'); // Елемент для повідомлення
+    const restoreButton = document.getElementById('restoreButton'); // Кнопка "Повернутись"
 
     // Перевіряємо наявність ключових елементів перед продовженням
-    if (!suspendContainer || !screenshotImg || !screenshotUnavailable) {
-         console.error("Suspend script: Не знайдено необхідні елементи DOM для скріншоту.");
-         // Можемо приховати батьківський контейнер, якщо він існує
-         if (suspendContainer) {
-              suspendContainer.style.display = 'none'; // Приховуємо весь блок скріншоту, якщо DOM не повний
+    // Тепер перевіряємо головний контейнер, картку та елементи скріншоту/повідомлення
+    if (!suspendPageContainer || !suspendCard || !screenshotContainer || !screenshotImg || !screenshotUnavailable || !restoreButton) {
+         console.error("Suspend script: Не знайдено необхідні елементи DOM. Неможливо ініціалізувати UI.");
+         // Показуємо повідомлення про помилку на екрані, якщо є куди
+         const t = window.i18nTexts || {};
+         if (screenshotUnavailable) { // Можливо, контейнер скріншоту все ж існує
+              screenshotUnavailable.textContent = t.screenshotFetchError || 'Error loading page elements'; // Використовуємо локалізований текст
+              screenshotUnavailable.style.display = 'flex'; // Робимо його видимим
+              // Ховаємо інші елементи, якщо вони існують, але не повний набір
+              if(screenshotImg) screenshotImg.style.display = 'none';
+              // Якщо картки немає, не можемо показати основний UI
+         } else {
+             // Взагалі немає куди показати помилку...
+             console.error("Suspend script: FATAL - Cannot find critical DOM elements.");
          }
-         // Все ще завантажуємо основний UI (без скріншоту)
-          loadMainUI();
-         return; // Зупиняємо виконання, якщо DOM не повний
+         // Робимо тіло видимим, навіть якщо не повний UI, щоб уникнути застрягання
+         document.documentElement.style.visibility = 'visible';
+         return; // Зупиняємо виконання скрипта
     }
 
-    // Приховуємо елементи скріншоту за замовчуванням
+    // Приховуємо вміст контейнера скріншоту за замовчуванням (сам контейнер прихований за допомогою CSS opacity/visibility)
     screenshotImg.style.display = 'none';
     screenshotUnavailable.style.display = 'none';
 
@@ -75,25 +87,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       window.applyTheme(theme); // Use the global applyTheme
 
-      // Apply screenshot setting class to the container
+      // Apply screenshot setting class to the main container if disabled
       const enableScreenshots = result.enableScreenshots !== undefined ? result.enableScreenshots : true; // Default to true
       if (!enableScreenshots) {
-           suspendContainer.classList.add('screenshots-disabled');
-           // Update the message placeholder if screenshots are disabled
-            const t = window.i18nTexts || {};
-            screenshotUnavailable.textContent = t.screenshotDisabledSetting || 'Screenshots disabled in settings';
-            screenshotUnavailable.style.display = 'flex'; // Show the message
+           suspendPageContainer.classList.add('screenshots-disabled'); // Приховує контейнер скріншоту повністю через CSS
+           // Показуємо повідомлення про відсутність скріншота (якщо він є в DOM)
+            const t = window.i18nTexts || {}; // Оновлюємо тексти
+            if (screenshotUnavailable) {
+                screenshotUnavailable.textContent = t.screenshotDisabledSetting || 'Screenshots disabled in settings';
+                // Не робимо видимим тут, оскільки весь контейнер прихований через CSS
+            }
             console.log("Suspend script: Screenshots are disabled in settings.");
+             // Оскільки скріншоти вимкнені, не додаємо слухачі наведення
       } else {
-           suspendContainer.classList.remove('screenshots-disabled');
-           // If enabled, attempt to load the screenshot
-           loadScreenshot(); // Call the function to load the screenshot
+           suspendPageContainer.classList.remove('screenshots-disabled'); // Переконуємося, що контейнер не приховано через CSS
+           // Якщо увімкнено, намагаємося завантажити скріншот та додати слухачі
+           loadScreenshotAndSetupHover(); // Викликаємо нову функцію
       }
 
       // Make body visible after theme and initial settings class are applied
       document.documentElement.style.visibility = 'visible';
 
       // Завантажуємо основний UI (фавікон, заголовок, кнопку)
+      // Викликаємо незалежно від стану скріншотів
       loadMainUI();
     });
 
@@ -110,70 +126,151 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const tabFaviconElement = document.getElementById('tabFavicon');
     const suspendedTabTitleElement = document.getElementById('suspendedTabTitle');
-    const restoreButton = document.getElementById('restoreButton');
+    // restoreButton вже отримано на початку скрипта
 
 
-    // --- Функція для завантаження та відображення скріншоту ---
-    function loadScreenshot() {
-         // Перевіряємо, чи є дійсний tabId та елементи для скріншоту (повторно на випадок, якщо loadScreenshot викликається окремо)
-         if (numericTabId === chrome.tabs.TAB_ID_NONE || !screenshotImg || !screenshotUnavailable) {
-             console.warn("Suspend script: Tab ID is invalid or screenshot elements not found. Cannot load screenshot.");
-              if (screenshotUnavailable) { // Якщо елемент повідомлення існує, показуємо повідомлення
+    // --- Функція для завантаження скріншоту та налаштування слухачів наведення ---
+    function loadScreenshotAndSetupHover() {
+         // Перевіряємо, чи є дійсний tabId та елементи для скріншоту та картки
+         if (numericTabId === chrome.tabs.TAB_ID_NONE || !screenshotContainer || !screenshotImg || !screenshotUnavailable || !suspendCard || !suspendPageContainer) {
+             console.warn("Suspend script: Не знайдено необхідні елементи або Tab ID недійсний для завантаження скріншоту/налаштування ховеру.");
+              if (screenshotUnavailable) { // Показуємо повідомлення про недоступність скріншоту
                    const t = window.i18nTexts || {};
                    screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
-                   screenshotUnavailable.style.display = 'flex'; // Show message
+                    // Робимо повідомлення видимим всередині контейнера (сам контейнер прихований)
+                    screenshotUnavailable.style.display = 'flex'; // Використовуємо flex для центрування
+                    screenshotImg.style.display = 'none'; // Переконуємося, що зображення приховано
               }
-             return;
+             // Навіть якщо скріншот недоступний, додаємо слухачі наведення на картку
+             setupHoverListeners();
+             return; // Зупиняємо виконання, якщо DOM не повний
          }
 
-         // Запитуємо скріншот у фонового скрипта
+         // Запитуємо скріншот у фонового скрита
          sendMessageWithRetry({ action: 'getScreenshot', tabId: numericTabId }, (response, error) => {
               const t = window.i18nTexts || {}; // Оновлюємо тексти
 
-              if (error || !response || !response.success) {
+              if (error || !response || !response.success || !response.screenshotUrl) {
                    console.error(`Suspend script: Помилка отримання скріншоту для вкладки ${numericTabId}:`, error || response?.error || "Невідома помилка");
-                   // Показуємо повідомлення про помилку
+                   // Якщо скріншот недоступний (помилка або URL порожній), показуємо повідомлення
                    if (screenshotUnavailable) {
-                        screenshotUnavailable.textContent = t.screenshotFetchError || 'Error loading screenshot'; // Використовуємо текст помилки
-                        screenshotUnavailable.style.display = 'flex'; // Show message
+                        screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable'; // Використовуємо локалізований текст
+                        screenshotUnavailable.style.display = 'flex'; // Робимо повідомлення видимим
                    }
                    screenshotImg.style.display = 'none'; // Приховуємо img
+
+                   // Навіть якщо скріншот недоступний, додаємо слухачі наведення на картку
+                   setupHoverListeners();
+
               } else {
                    const screenshotUrl = response.screenshotUrl;
-                   if (screenshotUrl) {
-                        console.log(`Suspend script: Скріншот отримано для вкладки ${numericTabId}.`);
-                        // Встановлюємо src скріншоту
-                        screenshotImg.src = screenshotUrl;
-                         screenshotImg.style.display = 'block'; // Робимо img видимим
+                   // Встановлюємо src скріншоту
+                   screenshotImg.src = screenshotUrl;
+                   screenshotImg.style.display = 'block'; // Робимо img видимим
+                   screenshotUnavailable.style.display = 'none'; // Ховаємо повідомлення
 
-                         screenshotImg.onload = () => {
-                              console.log(`Suspend script: Скріншот для ${numericTabId} успішно завантажено.`);
-                             screenshotUnavailable.style.display = 'none'; // Ховаємо повідомлення, якщо було
-                              // CSS тепер керує початковою прозорістю та появою при ховері
-                         };
+                   screenshotImg.onload = () => {
+                        console.log(`Suspend script: Скріншот для ${numericTabId} успішно завантажено.`);
+                       // Після успішного завантаження додаємо слухачі наведення на картку
+                       setupHoverListeners();
+                   };
 
-                         screenshotImg.onerror = () => {
-                             console.warn(`Suspend script: Помилка завантаження скріншоту Data URL для ${numericTabId}.`);
-                              // Якщо скріншот не завантажився, приховуємо <img> і показуємо повідомлення
-                             screenshotImg.style.display = 'none';
-                             if (screenshotUnavailable) {
-                                  screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
-                                  screenshotUnavailable.style.display = 'flex'; // Show message
-                             }
-                         };
-
-                   } else {
-                        console.log(`Suspend script: Скріншот відсутній для вкладки ${numericTabId}.`);
-                         // Якщо скріншот відсутній, показуємо відповідне повідомлення
-                         if (screenshotUnavailable) {
-                             screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
-                             screenshotUnavailable.style.display = 'flex'; // Show message
-                         }
-                        screenshotImg.style.display = 'none'; // Приховуємо img
+                   screenshotImg.onerror = () => {
+                       console.warn(`Suspend script: Помилка завантаження скріншоту Data URL для ${numericTabId}.`);
+                        // Якщо скріншот не завантажився, приховуємо <img> і показуємо повідомлення
+                       screenshotImg.style.display = 'none';
+                       if (screenshotUnavailable) {
+                            screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
+                            screenshotUnavailable.style.display = 'flex'; // Робимо повідомлення видимим
+                       }
+                        // Додаємо слухачі наведення на картку
+                       setupHoverListeners();
+                   };
+                   // Якщо зображення вже завантажилося з кешу, обробники onload/onerror можуть не спрацювати.
+                   // Перевіряємо стан завантаження, якщо src вже встановлено.
+                   if (screenshotImg.complete) {
+                       if (screenshotImg.naturalHeight !== 0) {
+                           console.log(`Suspend script: Скріншот для ${numericTabId} завантажено з кешу.`);
+                            setupHoverListeners(); // Додаємо слухачі наведення
+                       } else {
+                           // complete true, але naturalHeight 0 означає помилку завантаження з кешу
+                            console.warn(`Suspend script: Скріншот з кешу для ${numericTabId} недійсний.`);
+                            screenshotImg.style.display = 'none';
+                            if (screenshotUnavailable) {
+                                 screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
+                                 screenshotUnavailable.style.display = 'flex';
+                            }
+                            setupHoverListeners(); // Додаємо слухачі наведення, щоб показувати повідомлення
+                       }
                    }
               }
          });
     }
+
+     // --- Функція для налаштування слухачів наведення на картку ---
+     function setupHoverListeners() {
+          // Перевіряємо наявність головного контейнера та картки
+          if (!suspendPageContainer || !suspendCard) {
+              console.warn("Suspend script: Не знайдено головний контейнер сторінки або картку для додавання слухачів наведення.");
+              return;
+          }
+
+          // Функція для зміни видимості контейнера скріншоту
+          function toggleScreenshotContainerVisibility(show) {
+              // Перевіряємо, чи скріншоти увімкнено в налаштуваннях
+              // Клас 'screenshots-disabled' додається до suspendPageContainer при завантаженні налаштувань,
+              // якщо опція enableScreenshots вимкнена.
+              if (!suspendPageContainer.classList.contains('screenshots-disabled')) {
+                   if (show) {
+                       suspendPageContainer.classList.add('show-screenshot');
+                   } else {
+                       suspendPageContainer.classList.remove('show-screenshot');
+                   }
+              }
+          }
+
+           // Додаємо слухачі наведення миші на саму картку
+           // При наведенні на картку або будь-який її дочірній елемент, з'явиться скріншот
+           suspendCard.addEventListener('mouseenter', () => {
+                toggleScreenshotContainerVisibility(true);
+           });
+
+           // При відведенні миші від картки або будь-якого її дочірнього елемента, скріншот зникне
+           suspendCard.addEventListener('mouseleave', () => {
+                // Використовуємо setTimeout, щоб дати можливість миші перейти до скріншоту,
+                // якщо користувач хоче клікнути саме по скріншоту, хоча клік відновлює вкладку
+                setTimeout(() => {
+                     // Перевіряємо, чи миша дійсно не на картці та не на контейнері скріншоту
+                     // (навіть якщо pointer-events для скріншоту увімкнено при hover)
+                     const isHoveringCard = suspendCard.matches(':hover');
+                     const isHoveringScreenshot = screenshotContainer.matches(':hover');
+                     if (!isHoveringCard && !isHoveringScreenshot) {
+                         toggleScreenshotContainerVisibility(false);
+                     }
+                }, 50); // Невелика затримка
+           });
+
+           // Додаємо слухачі фокусу/блюру для доступності з клавіатури (наприклад, на кнопку відновлення)
+           if (restoreButton) { // Перевіряємо, чи кнопка існує
+                restoreButton.addEventListener('focus', () => {
+                     toggleScreenshotContainerVisibility(true);
+                });
+
+                // Blur також використовує затримку для кращого UX, якщо користувач переміщує фокус між елементами
+                restoreButton.addEventListener('blur', () => {
+                    setTimeout(() => {
+                         // Перевіряємо, чи активний елемент (який отримав фокус після blur) не є частиною картки
+                         if (!suspendCard.contains(document.activeElement)) {
+                              toggleScreenshotContainerVisibility(false);
+                         }
+                    }, 50); // Невелика затримка
+                });
+           }
+
+
+          console.log("Suspend script: Слухачі наведення/фокусу додано до картки та кнопки 'Повернутись'.");
+     }
+
 
     // --- Функція для завантаження та відображення основного UI (не скріншоту) ---
     function loadMainUI() {
@@ -213,15 +310,10 @@ document.addEventListener('DOMContentLoaded', () => {
               // Restore the tab by navigating to the original URL
               window.location.href = decodeURIComponent(url);
             });
-            // Make the whole document body clickable to restore the tab (Optional, but common)
-            // document.body.addEventListener('click', (event) => { // Додано об'єкт event
-            //     // Check if the click target is NOT the restore button itself, to avoid double-triggering
-            //     // Перевіряємо, чи ціль кліку НЕ є частиною контейнера скріншоту
-            //      const screenshotContainerElement = document.getElementById('screenshotContainer');
-            //      if (event.target !== restoreButton && !screenshotContainerElement?.contains(event.target)) {
-            //           window.location.href = decodeURIComponent(url);
-            //      }
-            // });
+             // Прибираємо клік на весь документ, бо тепер є специфічний ховер на кнопку
+        } else if (restoreButton && !url) {
+             console.warn("Suspend script: Restore button exists but no URL provided. Button will not work.");
+             restoreButton.setAttribute('disabled', 'true'); // Вимикаємо кнопку, якщо немає URL
         }
     }
 });

@@ -4,14 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title data-i18n="suspendTitle">Tab Suspended</title>
-  <link rel="stylesheet" href="styles.css?v=1.8" /> <!-- Оновлена версія CSS -->
+  <link rel="stylesheet" href="styles.css?v=1.9" /> <!-- Оновлена версія CSS -->
 </head>
 <body class="light"> <!-- Клас буде оновлено за допомогою JS -->
-  <main class="suspend-wrapper centered-wrapper"> <!-- Додано клас centered-wrapper -->
+  <main class="suspend-wrapper centered-wrapper">
     <!-- Новий контейнер для керування позиціонуванням картки та скріншоту -->
-    <div class="suspend-container">
-        <!-- Основний вміст картки -->
-        <div class="card suspend-card">
+    <div id="suspendPageContainer" class="suspend-container">
+        <!-- Контейнер для скріншоту - ПЕРЕМІЩЕНО НАВЕРХ -->
+        <!-- Цей контейнер буде спочатку прихований -->
+        <div id="screenshotContainer" class="screenshot-container">
+             <img id="screenshotImg" src="" alt="Screenshot of suspended tab">
+             <!-- Місце для повідомлення про відсутність скріншота (через налаштування або помилку) -->
+             <div id="screenshotUnavailable" class="screenshot-message"></div>
+        </div>
+
+        <!-- Основний вміст картки - ПЕРЕМІЩЕНО ВНИЗ -->
+        <!-- Додано ID для зручності вибору в JS -->
+        <div id="suspendCard" class="card suspend-card">
           <div class="icon" id="themeIcon">🌙</div> <!-- Іконка теми (сонце/місяць), текст оновлюється JS -->
 
            <!-- Блок з іконкою сайту та заголовком призупиненої вкладки -->
@@ -30,12 +39,6 @@
 
         </div> <!-- Кінець suspend-card -->
 
-        <!-- Контейнер для скріншоту - ховається/показується за CSS наведенням на suspend-container -->
-        <div id="screenshotContainer" class="screenshot-container">
-             <img id="screenshotImg" src="" alt="Screenshot of suspended tab">
-             <!-- Місце для повідомлення про відсутність скріншота (через налаштування або помилку) -->
-             <div id="screenshotUnavailable" class="screenshot-message"></div>
-        </div>
 
     </div> <!-- Кінець suspend-container -->
   </main>
