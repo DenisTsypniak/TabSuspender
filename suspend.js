@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!suspendPageContainer || !suspendCard || !screenshotContainer || !screenshotImg || !screenshotUnavailable || !restoreButton) {
          console.error("Suspend script: Не знайдено необхідні елементи DOM. Неможливо ініціалізувати UI.");
          // Показуємо повідомлення про помилку на екрані, якщо є куди
-         const t = window.i18nTexts || {};
+         const t = window.i18nTexts || {}; // Отримуємо локалізовані тексти
          if (screenshotUnavailable) { // Можливо, контейнер скріншоту все ж існує
               screenshotUnavailable.textContent = t.screenshotFetchError || 'Error loading page elements'; // Використовуємо локалізований текст
               screenshotUnavailable.style.display = 'flex'; // Робимо його видимим
@@ -94,11 +94,18 @@ document.addEventListener('DOMContentLoaded', () => {
            // Показуємо повідомлення про відсутність скріншота (якщо він є в DOM)
             const t = window.i18nTexts || {}; // Оновлюємо тексти
             if (screenshotUnavailable) {
+                // Використовуємо локалізований текст
                 screenshotUnavailable.textContent = t.screenshotDisabledSetting || 'Screenshots disabled in settings';
-                // Не робимо видимим тут, оскільки весь контейнер прихований через CSS
+                // !!! Важливо: Тут ми не робимо елемент видимим, оскільки весь контейнер прихований за допомогою CSS.
+                // Відображення цього повідомлення, коли контейнер прихований, не має сенсу.
+                // Можливо, пізніше варто переглянути, чи потрібно показувати текст "Скріншоти вимкнено" деінде на сторінці призупинення.
+                // Наразі залишаємо як є, але знаючи, що текст не буде видно через CSS.
             }
             console.log("Suspend script: Screenshots are disabled in settings.");
              // Оскільки скріншоти вимкнені, не додаємо слухачі наведення
+             // Але можливо варто додати їх, щоб хоча б картка реагувала? Наразі логіка toggleScreenshotContainerVisibility
+             // враховує клас 'screenshots-disabled' і нічого не робить.
+             setupHoverListeners(); // Все одно додаємо слухачі, вони безпечні
       } else {
            suspendPageContainer.classList.remove('screenshots-disabled'); // Переконуємося, що контейнер не приховано через CSS
            // Якщо увімкнено, намагаємося завантажити скріншот та додати слухачі
@@ -136,8 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
              console.warn("Suspend script: Не знайдено необхідні елементи або Tab ID недійсний для завантаження скріншоту/налаштування ховеру.");
               if (screenshotUnavailable) { // Показуємо повідомлення про недоступність скріншоту
                    const t = window.i18nTexts || {};
+                   // Використовуємо загальне повідомлення про недоступність
                    screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable';
-                    // Робимо повідомлення видимим всередині контейнера (сам контейнер прихований)
+                    // Робимо повідомлення видимим всередині контейнера скріншоту
                     screenshotUnavailable.style.display = 'flex'; // Використовуємо flex для центрування
                     screenshotImg.style.display = 'none'; // Переконуємося, що зображення приховано
               }
@@ -150,11 +158,13 @@ document.addEventListener('DOMContentLoaded', () => {
          sendMessageWithRetry({ action: 'getScreenshot', tabId: numericTabId }, (response, error) => {
               const t = window.i18nTexts || {}; // Оновлюємо тексти
 
-              if (error || !response || !response.success || !response.screenshotUrl) {
-                   console.error(`Suspend script: Помилка отримання скріншоту для вкладки ${numericTabId}:`, error || response?.error || "Невідома помилка");
-                   // Якщо скріншот недоступний (помилка або URL порожній), показуємо повідомлення
+              // --- ЗМІНЕНО: Уточнюємо логування та повідомлення ---
+              if (error || !response || !response.success) {
+                   // Це справжня помилка зв'язку або логічна помилка на стороні SW
+                   console.error(`Suspend script: Помилка отримання скріншоту для вкладки ${numericTabId}:`, error || response?.error || "Невідома помилка від SW");
+                   // Показуємо повідомлення про помилку завантаження
                    if (screenshotUnavailable) {
-                        screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable'; // Використовуємо локалізований текст
+                        screenshotUnavailable.textContent = t.screenshotFetchError || 'Error loading screenshot'; // Використовуємо локалізований текст помилки
                         screenshotUnavailable.style.display = 'flex'; // Робимо повідомлення видимим
                    }
                    screenshotImg.style.display = 'none'; // Приховуємо img
@@ -162,7 +172,22 @@ document.addEventListener('DOMContentLoaded', () => {
                    // Навіть якщо скріншот недоступний, додаємо слухачі наведення на картку
                    setupHoverListeners();
 
-              } else {
+              } else if (response.success && !response.screenshotUrl) {
+                  // SW успішно відповів, але скріншот відсутній в storage.session
+                   console.log(`Suspend script: Скріншот для вкладки ${numericTabId} не знайдено в storage.session.`);
+                   // Показуємо повідомлення про відсутність скріншоту
+                   if (screenshotUnavailable) {
+                       screenshotUnavailable.textContent = t.screenshotUnavailable || 'Screenshot unavailable'; // Використовуємо локалізований текст про відсутність
+                        screenshotUnavailable.style.display = 'flex'; // Робимо повідомлення видимим
+                   }
+                   screenshotImg.style.display = 'none'; // Приховуємо img
+
+                   // Додаємо слухачі наведення на картку (щоб показувати повідомлення про відсутність)
+                   setupHoverListeners();
+
+              }
+              else {
+                   // Успішне отримання скріншоту
                    const screenshotUrl = response.screenshotUrl;
                    // Встановлюємо src скріншоту
                    screenshotImg.src = screenshotUrl;
@@ -186,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Додаємо слухачі наведення на картку
                        setupHoverListeners();
                    };
-                   // Якщо зображення вже завантажилося з кешу, обробники onload/onerror можуть не спрацювати.
+                   // Якщо зображення вже завантазилося з кешу, обробники onload/onerror можуть не спрацювати.
                    // Перевіряємо стан завантаження, якщо src вже встановлено.
                    if (screenshotImg.complete) {
                        if (screenshotImg.naturalHeight !== 0) {
@@ -203,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             setupHoverListeners(); // Додаємо слухачі наведення, щоб показувати повідомлення
                        }
                    }
-              }
+              } // Кінець else (успішне отримання)
          });
     }
 
