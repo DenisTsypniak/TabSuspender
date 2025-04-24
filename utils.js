@@ -3,7 +3,8 @@
 // Робимо об'єкт з локалізованими текстами доступним глобально після виклику applyLanguage
 let i18nTexts = {}; // Оголошуємо глобально
 
-// Кеш для елементів з атрибутом data-i18n
+// Кеш для елементів з атрибутом data-i18n та data-i18n-title
+// Оновлюємо кеш, щоб включати обидва типи атрибутів
 let i18nElementsCache = null;
 
 function applyLanguage(lang) {
@@ -28,7 +29,7 @@ function applyLanguage(lang) {
       whitelistUrlsPh: "Наприклад: https://example.com/page",
       whitelistDomainsPh: "наприклад: example.com, google.com",
       settingsSaved: "Налаштування збережено!",
-      optionsTitle: "Налаштування Призупинення вкладок",
+      optionsTitle: "Налаштування Призузупинення вкладок",
       warningMessage: "⚠️ Цю сторінку неможливо призузупинити",
       warningSystemPage: "⚠️ Цю сторінку неможливо призузупинити (системна сторінка)",
       warningWhitelisted: "⚠️ Цю сторінку неможливо призузупинити (у білому списку)",
@@ -54,7 +55,7 @@ function applyLanguage(lang) {
       debugTabId: "ID вкладки",
       debugTitleCol: "Назва",
       debugUrl: "URL",
-      debugTimeLeft: "Час до призупинення",
+      debugTimeLeft: "Час до призузупинення",
       debugReason: "Причина", // Коротше
       debugError: "Помилка: не вдалося отримати дані",
       debugUpdated: "Дані оновлено",
@@ -74,7 +75,7 @@ function applyLanguage(lang) {
       reasonUnknown: "Невідома причина", // Неочікуваний стан
       reasonError: "Помилка перевірки URL", // Не вдалося перевірити URL (наприклад, URL недійсний)
       reasonSuspendedByTimer: "Призузупинена (таймер)", // Вкладка, призупинена таймером
-      reasonSuspendedManually: "Призузупинена (вручну)", // Вкладка, призупинена вручну
+      reasonSuspendedManually: "Призузупинена (вручну)", // Вкладка, призупинена вручн
       deleteItemConfirm: "Видалити цей елемент?", // Додано для підтвердження
       clearListButtonConfirm: "Очистити весь список?", // Додано для підтвердження
       preventVideoSuspendLabel: "Не призупиняти, якщо відео на паузі", // Текст для чекбокса
@@ -89,6 +90,8 @@ function applyLanguage(lang) {
       screenshotFetchError: "Помилка завантаження скріншоту", // Повідомлення про помилку при отриманні скріншоту
       screenshotDisabledSetting: "Скріншоти вимкнено в налаштуваннях", // Повідомлення, коли опція вимкнена
       reasonScreenshotDisabledSetting: "Скріншоти вимкнено", // Причина для Debug панелі, коли опція вимкнена
+      // ДОДАНО: Текст підказки для опції скріншотів
+      screenshotsTooltip: "На призупиненій вкладці розширення відображатиме скріншот сторінки до її призупинення.\n\nСкріншот сторінки є експериментальною функцією і може призвести до значного навантаження на процесор, а також підвищеного споживання пам'яті.\n\nЯкщо Ви помітили дивну поведінку, наприклад, тривале призупинення вкладки або раптові вильоти Chrome, спробуйте вимкнути цю функцію."
     },
     en: {
       popupTitle: "Tab Suspender",
@@ -171,6 +174,8 @@ function applyLanguage(lang) {
       screenshotFetchError: "Error loading screenshot", // Message on error fetching screenshot
       screenshotDisabledSetting: "Screenshots disabled in settings", // Message when option is disabled
       reasonScreenshotDisabledSetting: "Screenshots disabled", // Reason for Debug Panel when option is disabled
+      // ДОДАНО: Текст підказки для опції скріншотів
+      screenshotsTooltip: "On a suspended tab, the extension will display a screenshot of the page before it was suspended.\n\nPage screenshots are an experimental feature and can significantly increase CPU load and memory usage.\n\nIf you notice strange behavior, such as prolonged tab suspension or sudden Chrome crashes, try disabling this feature."
     }
   };
 
@@ -182,37 +187,57 @@ function applyLanguage(lang) {
   window.i18nTexts.language = lang; // Зберігаємо код активної мови
 
   // --- Оптимізація: Кешування елементів UI для локалізації ---
-  // При першому виклику applyLanguage, знаходимо всі елементи з data-i18n та кешуємо їх.
+  // При першому виклику applyLanguage, знаходимо всі елементи з атрибутом data-i18n або data-i18n-title
   if (i18nElementsCache === null) {
-      i18nElementsCache = document.querySelectorAll('[data-i18n]');
-      // Додатково кешуємо елементи option з data-i18n
-      i18nElementsCache = Array.from(i18nElementsCache).concat(Array.from(document.querySelectorAll('select option[data-i18n]')));
+      // Find elements with data-i18n OR data-i18n-title
+      const elementsWithI18n = document.querySelectorAll('[data-i18n], [data-i18n-title]');
+      // Find select option elements with data-i18n separately if needed (handled by the main query now)
+      // const optionElements = document.querySelectorAll('select option[data-i18n]');
+
+      // Combine and unique-ify the list
+      // i18nElementsCache = Array.from(elementsWithI18n).concat(Array.from(optionElements)); // No need to concat separately if query is broad enough
+       i18nElementsCache = Array.from(elementsWithI18n); // The single query should cover all cases now
+
+      // Remove duplicates (just in case an element matches both) - Set handles this
+      i18nElementsCache = Array.from(new Set(i18nElementsCache));
+
+
       console.log(`Utils: Кешовано ${i18nElementsCache.length} елементів для локалізації.`);
   }
 
-  // Ітеруємося по кешованих елементах замість повторного пошуку в DOM
+  // Ітеруємося по кешованих елементах
   i18nElementsCache.forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    if (key && t[key]) { // Перевіряємо, що ключ існує і є текст для нього
+    // Обробка data-i18n для текстового вмісту або placeholder
+    const textKey = el.getAttribute('data-i18n');
+    if (textKey && t[textKey]) { // Check if key exists in texts
       if (el.tagName === 'INPUT' && el.hasAttribute('placeholder')) {
-          el.placeholder = t[key];
+          el.placeholder = t[textKey];
       } else if (el.tagName === 'OPTION') {
-          // Для <option> елементів, які можуть мати атрибут value
-          // Оновлюємо textContent
-           el.textContent = t[key];
+          // For <option> elements, which might have a value attribute
+          // Update textContent
+           el.textContent = t[textKey];
       }
       else {
-          el.textContent = t[key];
+          // For most elements, update textContent
+          el.textContent = t[textKey];
       }
-    } else if (key) { // Логуємо попередження, тільки якщо ключ існує, але текст відсутній
-        // console.warn(`Utils: i18n ключ "${key}" не знайдено для мови "${lang}"`);
+    } else if (textKey) {
+        // console.warn(`Utils: i18n text key "${textKey}" not found for language "${lang}"`);
+        // Optionally clear text content if translation is missing
+        // el.textContent = '';
     }
-    // Якщо елемент є <option>, його текст також оновлюється вище.
+
+    // Обробка data-i18n-title для атрибута title
+    const titleKey = el.getAttribute('data-i18n-title');
+    if (titleKey && t[titleKey]) { // Check if key exists in texts
+        // Set the title attribute with the localized text
+        el.title = t[titleKey];
+    } else if (titleKey) {
+         // If the tooltip key is not found, clear the title attribute
+         el.title = '';
+         // console.warn(`Utils: i18n title key "${titleKey}" not found for language "${lang}"`);
+    }
   });
-
-
-   // Текст повідомлення про статус обробляється динамічно в кожному UI-скрипті
-   // залежно від ситуації (завантаження, оновлено, помилка) та використовує i18nTexts безпосередньо.
 }
 
 function applyTheme(theme) {

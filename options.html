@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title data-i18n="optionsTitle">Налаштування Призупинення вкладок</title>
-  <link rel="stylesheet" href="styles.css?v=1.8"> <!-- Оновлена версія CSS -->
+  <title data-i18n="optionsTitle">Налаштування Призузупинення вкладок</title>
+  <link rel="stylesheet" href="styles.css?v=1.12"> <!-- Оновлена версія CSS -->
 </head>
 <body class="light"> <!-- Клас буде оновлено за допомогою JS -->
   <main class="options-wrapper">
     <div class="card options-card">
       <div class="icon">⚙️</div> <!-- Використовуємо іконку налаштувань -->
-      <h1 data-i18n="optionsTitle">Налаштування Призупинення вкладок</h1>
+      <h1 data-i18n="optionsTitle">Налаштування Призузупинення вкладок</h1>
 
       <div class="button-wrapper top-button-wrapper">
         <button id="openDebugPanel" class="btn blue" data-i18n="openDebugPanel">🛠️ Адмін-панель відладки</button>
@@ -60,10 +60,16 @@
                </div>
 
               <!-- НОВА ОПЦІЯ: Увімкнути скріншоти на сторінці призупинення -->
-              <div class="settings-item checkbox-item">
+               <div class="settings-item checkbox-item">
                    <input type="checkbox" id="enableScreenshots">
-                   <label for="enableScreenshots" data-i18n="enableScreenshotsLabel">Показувати скріншоти на сторінці призупинення</label>
-              </div>
+                   <!-- Обгортаємо мітку та іконку в span для кращого контролю позиціонування -->
+                   <span>
+                       <label for="enableScreenshots" data-i18n="enableScreenshotsLabel">Показувати скріншоти на сторінці призупинення</label>
+                       <!-- Іконка знаку питання з підказкою -->
+                       <!-- ВИДАЛЕНО: Текст "?" зсередини тегів -->
+                       <span class="tooltip-icon" data-i18n-title="screenshotsTooltip"></span>
+                   </span>
+               </div>
 
 
               <!-- Приклади тестових опцій, якщо вони є в налаштуваннях -->

@@ -4,6 +4,41 @@
 document.addEventListener('DOMContentLoaded', () => {
   // applyTheme та applyLanguage знаходяться в utils.js, який завантажується першим.
 
+  // --- Функція для надсилання повідомлення з повторними спробами ---
+  // Ця допоміжна функція локальна для UI-скриптів, що спілкуються з фоновим service worker
+  function sendMessageWithRetry(message, callback, retries = 5, delay = 100) {
+         // Перевіряємо, чи chrome.runtime доступний перед надсиланням
+         if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+              console.error("Options script: chrome.runtime недоступний для надсилання повідомлення.");
+               if (callback) callback(null, new Error("chrome.runtime недоступний"));
+              return;
+         }
+
+         chrome.runtime.sendMessage(message, (response) => {
+             // Перевіряємо chrome.runtime.lastError на наявність проблем під час надсилання/отримання повідомлення
+             if (chrome.runtime.lastError) {
+                 const error = chrome.runtime.lastError;
+                 console.warn(`Options script: Помилка надсилання повідомлення: ${error.message}. Залишилось спроб: ${retries}`, message);
+                 // Якщо помилка "Receiving end does not exist" (Service Worker неактивний) і залишились спроби
+                 if (retries > 0 && error.message.includes("Receiving end does not exist")) {
+                     // Чекаємо і спробуємо знову з експоненційним відступом
+                     setTimeout(() => {
+                         sendMessageWithRetry(message, callback, retries - 1, delay * 2);
+                     }, delay);
+                 } else {
+                     // Спроби вичерпано або інша помилка
+                     console.error("Options script: Не вдалося надіслати повідомлення після повторних спроб.", message, error);
+                     if (callback) callback(null, chrome.runtime.lastError); // Викликаємо callback з останньою помилкою
+                 }
+             } else {
+                 // Повідомлення успішно надіслано та відповідь отримана (навіть якщо відповідь сама по собі вказує на помилку)
+                 if (callback) callback(response);
+             }
+         });
+     }
+     // --- Кінець функції sendMessageWithRetry ---
+
+
   // Отримуємо посилання на елементи DOM. Використовуємо nullish coalescing (??)
   // або умовні перевірки при додаванні слухачів, щоб уникнути помилок,
   // якщо елемент не знайдено з якоїсь причини.
@@ -34,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Застосовуємо мову та тему негайно при завантаженні
   chrome.storage.sync.get(['language', 'theme'], (result) => {
-       // Застосовуємо мову спочатку, щоб завантажити тексти для атрибутів i18n
+       // Застосовуємо мову спочатку, щоб завантажити тексти для атрибутів i18n та i18n-title
        const currentLang = result.language || 'uk';
        window.applyLanguage(currentLang); // Використовуємо глобальну функцію applyLanguage
        // Встановлюємо візуальний стан кастомного перемикача мови
@@ -291,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
              // Не потрібно показувати статус тут, це запускається обробником кліку
          }
          if (testOption1Checkbox && changes.testOption1 !== undefined && changes.testOption1.newValue !== undefined) testOption1Checkbox.checked = changes.testOption1.newValue;
-         if (testOption2Checkbox && changes.testOption2 !== undefined && changes.testOption2.newValue !== undefined) testOption2Checkbox.checked = changes.testOption2.newValue;
+         if (testOption2Checkbox && changes.test2Option !== undefined && changes.testOption2.newValue !== undefined) testOption2Checkbox.checked = changes.testOption2.newValue;
     }
   });
 

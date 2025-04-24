@@ -301,7 +301,9 @@ body.dark .suspend-card .suspended-title {
 .suspend-card .suspend-header-block .favicon {
      width: 24px;
      height: 24px;
-     display: block;
+     vertical-align: middle; /* Added vertical-align */
+     border-radius: 2px; /* Small rounding */
+     object-fit: contain; /* Maintain aspect ratio */
      flex-shrink: 0; /* Prevent icon from shrinking */
 }
 
@@ -452,7 +454,7 @@ body.dark .btn.red:hover { background-color: var(--button-red-hover-dark); box-s
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
     padding: 15px;
     border: 1px solid var(--border-light);
-    margin-bottom: 0; /* Видаляємо margin-bottom з секцій, використовуємо gap в column */
+    margin-bottom: 0; /* Видаляємо margin-bottom, використовуємо gap в column */
     width: 100%; /* Займає всю ширину колонки */
     box-sizing: border-box;
     /* Додаємо gap для простору між settings-item всередині секції */
@@ -475,7 +477,7 @@ body.dark .settings-section {
   flex-basis: 300px; /* Базова ширина для правої колонки */
   flex-grow: 1;
   align-items: stretch; /* Розтягуємо елементи, щоб заповнити колонку */
-  /* Ці стилі тепер перенесено на inner settings-section */
+  /* Ці стилі тепер перенесені на inner settings-section */
   padding: 0; /* Видаляємо padding з right-column */
   border: none; /* Видаляємо border з right-column */
   box-shadow: none; /* Видаляємо box-shadow з right-column */
@@ -486,7 +488,7 @@ body.dark .settings-section {
     flex-direction: column;
 }
 body.dark .right-column {
-  /* Ці стилі тепер перенесено на inner settings-section */
+  /* Ці стилі тепер перенесені на inner settings-section */
    background-color: transparent; /* Прозорий фон для right-column */
 }
 
@@ -528,6 +530,15 @@ label {
     font-weight: normal; /* Менш жирний шрифт для міток чекбоксів */
     cursor: pointer; /* Вказуємо, що це клікабельний елемент */
 }
+
+/* Огортаючий span для label та tooltip icon */
+.settings-item.checkbox-item span {
+    display: flex;
+    align-items: center;
+    /* Можна додати gap між label і tooltip icon тут, якщо потрібно */
+    gap: 5px;
+}
+
 
 select {
   padding: 10px; /* Більше відступів */
@@ -888,7 +899,7 @@ body.dark .debug-card tr:hover td {
   max-width: 300px; /* Обмежена ширина для URL */
   word-break: break-all; /* Забезпечуємо перенос довгих URL */
 }
-.debug-card th:nth-child(5), .debug-card td:nth-child(5) { width: 100px; } /* Час до призупинення */
+.debug-card th:nth-child(5), .debug-card td:nth-child(5) { width: 100px; } /* Час до призузупинення */
 .debug-card th:nth-child(6), .debug-card td:nth-child(6) { width: 180px; } /* Причина */
 
 
@@ -908,3 +919,68 @@ body.dark .debug-card tr:hover td {
     border-radius: 2px; /* Невелике заокруглення */
     object-fit: contain; /* Зберігаємо пропорції */
 }
+
+/* Стилі для іконки підказки (?) */
+.tooltip-icon {
+    /* Прибираємо стандартні стилі посилання/кнопки */
+    display: inline-flex; /* Дозволяє центрувати текст */
+    align-items: center;
+    justify-content: center;
+    width: 16px; /* Розмір іконки */
+    height: 16px; /* Розмір іконки */
+    border: 1px solid var(--text-light); /* Межа */
+    border-radius: 50%; /* Кругла форма */
+    /* font-size: 10px; */ /* Розмір шрифту тепер задамо через псевдоелемент */
+    font-weight: bold;
+    cursor: help; /* Курсор підказки */
+    color: var(--text-light); /* Колір тексту */
+    margin-left: 5px; /* Відступ зліва від мітки */
+    flex-shrink: 0; /* Забороняємо стиснення */
+    box-sizing: border-box; /* Включаємо межу в розмір */
+    /* Додаємо відступи для тексту всередині круга, якщо потрібно */
+    /* padding: 2px; */ /* Можливо, не потрібно, якщо розмір шрифту малий */
+
+    /* Стилі для підказки (tooltip) */
+    position: relative; /* Для позиціонування власної підказки, якщо вона буде реалізована */
+    z-index: 1; /* Перекриває інші елементи, якщо підказка з'являється поруч */
+}
+
+/* Додаємо символ "?" за допомогою псевдоелемента */
+.tooltip-icon::before {
+    content: '?'; /* Встановлюємо вміст */
+    font-size: 10px; /* Розмір шрифту */
+     /* Вирівнювання тексту, якщо потрібно */
+     line-height: 1;
+}
+
+
+body.dark .tooltip-icon {
+    border-color: var(--text-dark);
+    color: var(--text-dark);
+}
+
+/* Прибираємо стандартний outline при фокусі, якщо він заважає */
+.tooltip-icon:focus {
+    outline: none;
+}
+
+/* Стиль при наведенні/фокусі на іконку підказки */
+.tooltip-icon:hover,
+.tooltip-icon:focus {
+    background-color: rgba(0, 0, 0, 0.1); /* Легкий фон при наведенні */
+}
+body.dark .tooltip-icon:hover,
+body.dark .tooltip-icon:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Це правило використовує стандартний атрибут title для підказки */
+/* Якщо потрібна кастомна підказка, CSS і JS будуть складнішими */
+
+
+/* Можливо, додати невеликий відступ під заголовками списків у налаштуваннях */
+/*
+.settings-section label:first-child {
+    margin-bottom: 10px;
+}
+*/
