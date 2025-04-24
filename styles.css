@@ -269,7 +269,7 @@ body.dark .card h1 {
 /* Приховати іконку теми на сторінці призупинення, оскільки вона тепер тільки в options */
 /* .suspend-card .icon { display: none; } */ /* Залишимо іконку, але вона тепер тільки 🌙 / 🌞 */
 
-/* Блок з іконкою сайту та заголовком */
+/* Блок з іконкою сайту та заголовком призупиненої вкладки */
 .suspend-card .suspend-header-block { /* Container for icon and title */
     display: flex; /* Use flexbox for alignment */
     align-items: center; /* Vertically center items */
@@ -279,6 +279,8 @@ body.dark .card h1 {
     padding: 0 10px;
     box-sizing: border-box;
     word-break: break-word; /* Allow text to break */
+    /* ДОДАНО: Центруємо сам блок, але текст всередині має інше вирівнювання */
+    text-align: center; /* Це не вплине на флекс-елементи, але на текст всередині, якщо не флекс */
 }
 
 /* Style for the suspended tab title text element */
@@ -291,7 +293,8 @@ body.dark .card h1 {
    word-break: break-word; /* Ensure text wrapping for long titles */
    flex-grow: 1; /* Allow title to take up space */
    flex-shrink: 1; /* Allow title to shrink */
-   text-align: left; /* Align text to the left */
+   /* ЗМІНЕНО: Вирівнюємо текст заголовка по центру */
+   text-align: center; /* Align text to the center */
 }
 body.dark .suspend-card .suspended-title {
   color: var(--text-dark);
@@ -515,7 +518,7 @@ label {
 .settings-item.checkbox-item {
     flex-direction: row; /* Розташовуємо мітку та чекбокс в рядок */
     align-items: center;
-    margin-bottom: 0; /* Менше простору для елементів з чекбоксами, використовуємо gap секції */
+    margin-bottom: 0; /* Менше простору для елементів з чекбосами, використовуємо gap секції */
     gap: 10px; /* Простір між чекбоксом та міткою */
 }
 

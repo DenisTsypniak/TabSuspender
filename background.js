@@ -16,9 +16,7 @@ const videoState = {};
 
 const ALARM_NAME = 'checkInactiveTabs'; // Ім'я для Chrome Alarm
 
-// --- ДОДАНО/ЗМІНЕНО: Функції для Service Worker ---
-// Ці функції потрібні в SW (наприклад, для getDebugInfo) і не мають залежати від 'window'.
-// Їх дублювання тут є необхідним для MV3 Service Worker.
+// --- Функції для Service Worker (дублюються, оскільки SW не має доступу до DOM) ---
 function escapeHTML_SW(str) {
   if (str === null || str === undefined) return '';
   const s = String(str);
@@ -39,15 +37,18 @@ function shortenUrl_SW(url, maxLength = 80) {
     const shortened = plainUrl.substring(0, startLength) + '...' + plainUrl.substring(plainUrl.length - endLength);
     return escapeHTML_SW(shortened);
 }
-// --- Кінець ДОДАНО/ЗМІНЕНО функцій для Service Worker ---
+// --- Кінець функцій для Service Worker ---
 
 
-// --- ЗМІНЕНО: Керування скріншотами активної вкладки (подієво-орієнтоване) ---
+// --- Керування скріншотами активної вкладки (подієво-орієнтоване) ---
 const SCREENSHOT_INITIAL_DELAY = 500; // Затримка перед першим скріншотом після активації (0.5 секунди)
 const SCREENSHOT_INTERACTION_DEBOUNCE = 1000; // Debounce затримка для захоплення після взаємодії (1 секунда)
 
 // Змінна для зберігання ID тайм-ауту для debounced захоплення при взаємодії
 let interactionCaptureTimeoutId = null;
+
+// ДОДАНО: Map для зберігання ID тайм-аутів початкового захоплення за Tab ID
+const initialCaptureTimeouts = new Map();
 
 // Функція для захоплення та збереження скріншоту для вказаної вкладки
 // Викликається з затримкою після активації або через debounced механізм після взаємодії
@@ -87,7 +88,7 @@ async function captureAndSaveScreenshotForTab(tabId, windowId) {
              return;
         }
 
-        // --- ДОДАНО: Обробка помилки "Tabs cannot be edited right now" та квоти ---
+        // --- Обробка помилки "Tabs cannot be edited right now" та квоти ---
         try {
             // Захоплюємо видиму частину активної вкладки
             console.log(`Service worker: Захоплення скріншоту для вкладки ${tabId}...`);
@@ -122,12 +123,17 @@ async function captureAndSaveScreenshotForTab(tabId, windowId) {
                   chrome.storage.session.remove(`screenshot_${tabId}`).catch(e => console.warn(`Service worker: Помилка очищення старого скріншоту для ${tabId}:`, e));
             }
         }
-        // --- Кінець ДОДАНО обробки помилки ---
+        // --- Кінець обробки помилки ---
+
+        // ДОДАНО: Видаляємо ID початкового тайм-ауту з Map після його спрацювання
+        if (initialCaptureTimeouts.has(tabId)) {
+            initialCaptureTimeouts.delete(tabId);
+            console.log(`Service worker: Видалено ID початкового тайм-ауту для вкладки ${tabId} після виконання захвату.`);
+        }
     });
 }
 
-// --- ДОДАНО: Debounced функція для захоплення скріншоту при взаємодії ---
-// Ця функція буде викликати captureAndSaveScreenshotForTab не частіше, ніж SCREENSHOT_INTERACTION_DEBOUNCE
+// --- Debounced функція для захоплення скріншоту при взаємодії ---
 const debouncedCaptureOnInteraction = (tabId, windowId) => {
     clearTimeout(interactionCaptureTimeoutId); // Очищаємо попередній запланований виклик
     interactionCaptureTimeoutId = setTimeout(() => {
@@ -135,7 +141,7 @@ const debouncedCaptureOnInteraction = (tabId, windowId) => {
     }, SCREENSHOT_INTERACTION_DEBOUNCE);
 };
 
-// --- Кінець ЗМІНЕНО скріншотів активної вкладки ---
+// --- Кінець керування скріншотами активної вкладки ---
 
 
 // --- Функція міграції даних ---
@@ -208,7 +214,7 @@ function migrateStorageData(data, callback) {
              console.warn("Service worker: Міграція: enableScreenshots мав неочікуваний формат, скинуто до true.");
          } else {
               changes.enableScreenshots = data.enableScreenshots; // Використовуємо існуюче значення
-               // Якщо інші поля не змінювались, міграція не потрібна
+               // Якщо інші поля не змінювались, міграція не потрібна (перевірка migrated вже врахує попередні поля)
               if (!changes.hasOwnProperty('whitelistUrls') && !changes.hasOwnProperty('whitelistDomains')) migrated = false;
          }
      }
@@ -226,7 +232,8 @@ function migrateStorageData(data, callback) {
                console.warn("Service worker: Міграція: preventSuspendIfVideoPaused мав неочікуваний формат, скинуто до false.");
            } else {
                changes.preventSuspendIfVideoPaused = data.preventSuspendIfVideoPaused; // Використовуємо існуюче значення
-                // Якщо інші поля не змінювались, міграція не потрібна (перевірка migrated вже врахує попередні поля)
+                // Якщо інші поля не змінювались, міграція не потрібна
+                 if (!changes.hasOwnProperty('whitelistUrls') && !changes.hasOwnProperty('whitelistDomains') && !changes.hasOwnProperty('enableScreenshots')) migrated = false;
            }
       }
 
@@ -507,7 +514,7 @@ async function suspendTab(tab, reason = 'timer') {
     suspendedTabInfo[currentTabId].url = originalUrl;
     suspendedTabInfo[currentTabId].title = originalTitle;
     suspendedTabInfo[currentTabId].favIconUrl = favIconUrl;
-    // Зберігаємо час призупинення лише при ПЕРШОМУ призупиненні (щоб час неактивності не скидався, якщо вкладка була відновлена, а потім знову призупинена)
+    // Зберігаємо час призупинення лише при ПЕРШОМУ призупиннені (щоб час неактивності не скидався, якщо вкладка була відновлена, а потім знову призупинена)
     if (!suspendedTabInfo[currentTabId].suspendedTime) {
          suspendedTabInfo[currentTabId].suspendedTime = Date.now();
     }
@@ -557,6 +564,13 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
     chrome.storage.session.remove(`screenshot_${tabId}`).catch(e => console.warn(`Service worker: Помилка очищення скріншоту для видаленої вкладки ${tabId}:`, e));
     // ЗМІНЕНО: Очищаємо debounced захоплення, якщо видалено вкладку (вона могла бути активною)
     clearTimeout(interactionCaptureTimeoutId);
+    // ДОДАНО: Очищаємо початковий тайм-аут для цієї вкладки з Map
+    if (initialCaptureTimeouts.has(tabId)) {
+        clearTimeout(initialCaptureTimeouts.get(tabId));
+        initialCaptureTimeouts.delete(tabId);
+         console.log(`Service worker: Очищено початковий тайм-аут скріншоту для видаленої вкладки ${tabId}.`);
+    }
+
 
     // Плануємо наступну перевірку неактивних вкладок через короткий час
     setTimeout(checkInactiveTabs, 100);
@@ -647,10 +661,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
          // Не очищаємо скріншот тут, він потрібен на suspend.html (вже зроблено вище при зміні URL)
     }
 
-     // ЗМІНЕНО: Зупиняємо debounced захоплення, якщо активна вкладка змінює URL
+     // ЗМІНЕНО: Зупиняємо debounced захоплення ТА початковий тайм-аут, якщо активна вкладка змінює URL
      // Це потрібно, щоб активність на попередній сторінці не викликала скріншот після навігації
-     if (tabId === chrome.tabs.TAB_ID_NONE || !tab || !tab.active || changeInfo.url) {
-          clearTimeout(interactionCaptureTimeoutId);
+     // Перевіряємо, що вкладка дійсна та активна, перш ніж скидати глобальний interactionCaptureTimeoutId
+     if (tab.id !== chrome.tabs.TAB_ID_NONE) {
+          // Очищаємо початковий тайм-аут для цієї вкладки, якщо він був запланований
+          if (initialCaptureTimeouts.has(tab.id)) {
+              clearTimeout(initialCaptureTimeouts.get(tab.id));
+              initialCaptureTimeouts.delete(tab.id);
+              console.log(`Service worker: Очищено початковий тайм-аут скріншоту для вкладки ${tab.id} через оновлення.`);
+          }
+           // Якщо це активна вкладка, скидаємо глобальний debounced таймер
+           if (tab.active) {
+               clearTimeout(interactionCaptureTimeoutId);
+           }
      }
 });
 
@@ -671,6 +695,11 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
                   console.warn(`Service worker: Не вдалося отримати вкладку ${activeInfo.tabId} для початкового скріншоту:`, chrome.runtime.lastError);
                   // ЗМІНЕНО: Очищаємо debounced захоплення, якщо вкладка недійсна
                   clearTimeout(interactionCaptureTimeoutId);
+                   // ДОДАНО: Очищаємо початковий тайм-аут для цієї вкладки з Map, якщо був
+                   if (initialCaptureTimeouts.has(activeInfo.tabId)) {
+                       clearTimeout(initialCaptureTimeouts.get(activeInfo.tabId));
+                       initialCaptureTimeouts.delete(activeInfo.tabId);
+                   }
                   return;
              }
              // Запускаємо захоплення з невеликою затримкою, щоб дати сторінці відрендеритися
@@ -684,18 +713,35 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
                   console.log(`Service worker: Плануємо початковий скріншот для вкладки ${tab.id} через ${SCREENSHOT_INITIAL_DELAY}ms.`);
                   // ЗМІНЕНО: Очищаємо попередній debounced capture, який міг бути запланований для попередньої активної вкладки
                   clearTimeout(interactionCaptureTimeoutId);
-                   setTimeout(() => {
+                  // ДОДАНО: Очищаємо будь-який попередній початковий тайм-аут для цієї вкладки (наприклад, якщо її деактивували, а потім знову швидко активували)
+                  if (initialCaptureTimeouts.has(tab.id)) {
+                      clearTimeout(initialCaptureTimeouts.get(tab.id));
+                  }
+
+                   // Плануємо новий початковий тайм-аут і зберігаємо його ID
+                   const timeoutId = setTimeout(() => {
                        captureAndSaveScreenshotForTab(tab.id, tab.windowId);
+                       // ID видаляється всередині captureAndSaveScreenshotForTab після виконання
                    }, SCREENSHOT_INITIAL_DELAY);
+                   initialCaptureTimeouts.set(tab.id, timeoutId); // Зберігаємо ID тайм-ауту
              } else {
                   // Якщо вкладка не підходить для скріншотів, очищаємо debounced capture
                   clearTimeout(interactionCaptureTimeoutId);
+                   // ДОДАНО: Очищаємо початковий тайм-аут для цієї вкладки з Map, якщо був
+                   if (initialCaptureTimeouts.has(activeInfo.tabId)) {
+                       clearTimeout(initialCaptureTimeouts.get(activeInfo.tabId));
+                       initialCaptureTimeouts.delete(activeInfo.tabId);
+                   }
              }
         });
         // --- Кінець ЗМІНЕНО ---
     } else {
          // ЗМІНЕНО: Якщо activeInfo.tabId === chrome.tabs.TAB_ID_NONE, очищаємо debounced capture
          clearTimeout(interactionCaptureTimeoutId);
+         // ДОДАНО: Очищаємо всі початкові тайм-аути, якщо немає активних вкладок (наприклад, всі вікна закрито)
+          initialCaptureTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+          initialCaptureTimeouts.clear();
+          console.log("Service worker: Вкладок немає (chrome.tabs.TAB_ID_NONE), очищено всі початкові тайм-аути скріншотів.");
     }
 });
 
@@ -766,18 +812,31 @@ chrome.tabs.query({}, (tabs) => {
     // ЗМІНЕНО: Запускаємо захоплення ОДНОГО скріншота для початкової активної вкладки, якщо вона є
     if (initialActiveTab) {
         console.log(`Service worker: При старті: плануємо початковий скріншот для активної вкладки ${initialActiveTab.id} через ${SCREENSHOT_INITIAL_DELAY}ms.`);
-        clearTimeout(interactionCaptureTimeoutId); // Скидаємо таймер захоплення
-         setTimeout(() => {
+        clearTimeout(interactionCaptureTimeoutId); // Скидаємо глобальний таймер захоплення
+         // ДОДАНО: Очищаємо будь-який попередній початковий тайм-аут для цієї вкладки
+        if (initialCaptureTimeouts.has(initialActiveTab.id)) {
+            clearTimeout(initialCaptureTimeouts.get(initialActiveTab.id));
+        }
+
+         // Плануємо новий початковий тайм-аут і зберігаємо його ID
+         const timeoutId = setTimeout(() => {
             captureAndSaveScreenshotForTab(initialActiveTab.id, initialActiveTab.windowId);
+             // ID видаляється всередині captureAndSaveScreenshotForTab після виконання
          }, SCREENSHOT_INITIAL_DELAY);
+         initialCaptureTimeouts.set(initialActiveTab.id, timeoutId); // Зберігаємо ID тайм-ауту
+
     } else {
          // Якщо немає активних вкладок при старті, очищаємо debounced capture
          clearTimeout(interactionCaptureTimeoutId);
+         // ДОДАНО: Очищаємо всі початкові тайм-аути, якщо немає активних вкладок
+          initialCaptureTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+          initialCaptureTimeouts.clear();
+          console.log("Service worker: При старті: немає активних вкладок, очищено всі початкові тайм-аути скріншотів.");
     }
     // --- Кінець ЗМІНЕНО ---
 
      // Запускаємо початкову перевірку Alarm після завантаження налаштувань та заповнення lastActivity
-     // Це також відбудеться після міграції даних у callback `chrome.storage.sync.get`
+     // Цей виклик знаходиться в callback `chrome.storage.sync.get` після міграції даних
      // checkInactiveTabs(); // Цей виклик зайвий, він вже є в callback `chrome.storage.sync.get` після міграції
 });
 
@@ -841,7 +900,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 // Не викликаємо checkInactiveTabs тут одразу, щоб уникнути надмірного навантаження
                 // Alarm спрацює у свій час, або буде перепланований.
 
-                 // --- ДОДАНО: Запускаємо захоплення скріншоту при взаємодії (якщо вкладка активна) ---
+                 // --- ЗМІНЕНО: Запускаємо захоплення скріншоту при взаємодії (якщо вкладка активна) ---
                  // Захоплюємо скріншот лише для активної вкладки при отриманні повідомлення про активність
                  if (sender.tab.active) {
                      const tab = sender.tab;
@@ -852,12 +911,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                      // Перевіряємо, чи вкладка підходить для захоплення скріншоту
                      if (isHttpOrHttps && !isInternalPage && !isOurSuspendedPage) {
+                          // ДОДАНО: Якщо є запланований початковий скріншот для цієї вкладки, скасовуємо його
+                          if (initialCaptureTimeouts.has(tab.id)) {
+                              clearTimeout(initialCaptureTimeouts.get(tab.id));
+                              initialCaptureTimeouts.delete(tab.id);
+                              console.log(`Service worker: Отримано активність від ${tab.id}. Скасовано початковий тайм-аут скріншоту.`);
+                          }
                          // Викликаємо debounced функцію захоплення скріншоту
                          debouncedCaptureOnInteraction(tab.id, tab.windowId);
                           // console.log(`Service worker: Отримано активність від активної вкладки ${tab.id}. Заплановано debounced скріншот.`);
                      }
                  }
-                 // --- Кінець ДОДАНО ---
+                 // --- Кінець ЗМІНЕНО ---
 
                 sendAsyncResponse({ success: true });
             } else {
@@ -1165,6 +1230,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                  // Отримуємо скріншот із storage.session
                  chrome.storage.session.get(`screenshot_${request.tabId}`, (result) => {
                       const screenshotUrl = result[`screenshot_${request.tabId}`];
+                      // ЗМІНЕНО: Завжди повертаємо success: true, якщо запит дійсний,
+                      // а наявність скріншота перевіряємо в UI по screenshotUrl
                       sendAsyncResponse({ success: true, screenshotUrl: screenshotUrl });
                  });
              } else {
@@ -1245,18 +1312,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     }
 
                     // Додаємо деталі стану відео до причини, якщо вони є
-                    // ЗМІНЕНО: Додаємо деталь про вимкнені скріншоти, якщо вкладка призупинена і опція вимкнена
-                    let reasonDetails = '';
-                    // TODO: Перенести локалізацію деталей відеостану в debug.js UI-скрипт
-                    if (tabVideoState?.hasVideo !== undefined) { // Перевіряємо, чи є дані про відео
-                         reasonDetails += ` (Video: ${tabVideoState.hasVideo ? 'Yes' : 'No'}, Playing: ${tabVideoState.isPlaying ? 'Yes' : 'No'}, Played: ${tabVideoState.hasPlayed ? 'Yes' : 'No'})`;
-                    }
-                    // ДОДАНО: Додаємо деталь про вимкнені скріншоти, якщо вкладка призупинена і опція вимкнена
-                    if (isOurSuspended && !enableScreenshots) {
-                         // Додаємо статичний текст деталі (локалізація відбувається в UI)
-                         reasonDetails += ` (${'Screenshots disabled by setting'})`;
+                    // ДОДАНО: Використовуємо ключі локалізації для деталей про відеостан
+                    let videoDetailsKey = null;
+                    if (tabVideoState?.hasVideo !== undefined) {
+                         if (tabVideoState.isPlaying) {
+                              videoDetailsKey = 'reasonVideoPlaying';
+                         } else if (tabVideoState.hasPlayed) {
+                             videoDetailsKey = preventSuspendIfVideoPaused ? 'reasonVideoPaused' : 'reasonVideoPausedOptionOff'; // Якщо опція ввімкнена, це причина блокування
+                         } else {
+                             videoDetailsKey = 'reasonVideoNotPlayed';
+                         }
                     }
 
+                    // ДОДАНО: Додаємо деталь про вимкнені скріншоти, якщо вкладка призупинена і опція вимкнена
+                    let screenshotDetailsKey = null;
+                    if (isOurSuspended && !enableScreenshots) {
+                         screenshotDetailsKey = 'reasonScreenshotDisabledSetting';
+                    }
 
                     // Використовуємо функції escapeHTML_SW та shortenUrl_SW для Debug Panel
                     // Для Debug Panel ми насправді хочемо бачити оригінальний URL та Title, якщо вкладка призупинена
@@ -1274,7 +1346,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         active: tab.active,
                         reasonKey: reasonKey, // Ключ причини для локалізації в UI
                         videoState: tabVideoState,
-                        reasonDetails: escapeHTML_SW(reasonDetails), // Додаткові деталі (включаючи стан відео та вимкнені скріншоти)
+                        videoDetailsKey: videoDetailsKey, // Ключ для локалізації деталей відеостану
+                        screenshotDetailsKey: screenshotDetailsKey, // Ключ для локалізації деталей скріншота
                         isOurSuspended: isOurSuspended // Додаємо прапорець, чи вкладка призупинена нами
                     };
                 });
@@ -1334,17 +1407,35 @@ chrome.storage.sync.get(['suspensionTime', 'whitelistUrls', 'whitelistDomains', 
 
                   if (isHttpOrHttps && !isInternalPage && !isOurSuspendedPage) {
                      console.log(`Service worker: Після завантаження налаштувань: плануємо початковий скріншот для активної вкладки ${initialActiveTab.id} через ${SCREENSHOT_INITIAL_DELAY}ms.`);
-                      clearTimeout(interactionCaptureTimeoutId); // Скидаємо таймер захоплення
-                      setTimeout(() => {
-                         captureAndSaveScreenshotForTab(initialActiveTab.id, initialActiveTab.windowId);
-                      }, SCREENSHOT_INITIAL_DELAY);
+                      clearTimeout(interactionCaptureTimeoutId); // Скидаємо глобальний таймер захоплення
+                      // ДОДАНО: Очищаємо будь-який попередній початковий тайм-аут для цієї вкладки
+                     if (initialCaptureTimeouts.has(initialActiveTab.id)) {
+                         clearTimeout(initialCaptureTimeouts.get(initialActiveTab.id));
+                     }
+
+                       // Плануємо новий початковий тайм-аут і зберігаємо його ID
+                       const timeoutId = setTimeout(() => {
+                           captureAndSaveScreenshotForTab(initialActiveTab.id, initialActiveTab.windowId);
+                            // ID видаляється всередині captureAndSaveScreenshotForTab після виконання
+                       }, SCREENSHOT_INITIAL_DELAY);
+                       initialCaptureTimeouts.set(initialActiveTab.id, timeoutId); // Зберігаємо ID тайм-ауту
+
                   } else {
                        // Якщо активна вкладка не підходить, очищаємо debounced capture
                        clearTimeout(interactionCaptureTimeoutId);
+                       // ДОДАНО: Очищаємо початковий тайм-аут для цієї вкладки з Map, якщо був
+                       if (initialCaptureTimeouts.has(initialActiveTab.id)) {
+                           clearTimeout(initialCaptureTimeouts.get(initialActiveTab.id));
+                           initialCaptureTimeouts.delete(initialActiveTab.id);
+                       }
                   }
              } else {
                    // Якщо немає активних вкладок при старті, очищаємо debounced capture
                    clearTimeout(interactionCaptureTimeoutId);
+                   // ДОДАНО: Очищаємо всі початкові тайм-аути, якщо немає активних вкладок
+                    initialCaptureTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+                    initialCaptureTimeouts.clear();
+                    console.log("Service worker: При старті: немає активних вкладок, очищено всі початкові тайм-аути скріншотів.");
              }
          });
         // --- Кінець ЗМІНЕНО ---
