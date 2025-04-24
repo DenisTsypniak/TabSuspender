@@ -102,6 +102,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
 
 
      // Зберігаємо посилання на обробники подій, щоб їх можна було видалити
+     // Назви функцій, які будуть використовуватися як обробники подій
      function handleMediaPlay() { try { if (this.tagName === 'VIDEO') hasAnyVideoPlayedLocally = true; debouncedUpdateMediaState(); } catch(e){ console.error("Content script: Помилка в handleMediaPlay", e, this); } }
      function handleMediaPause() { try { debouncedUpdateMediaState(); } catch(e){ console.error("Content script: Помилка в handleMediaPause", e, this); } }
      function handleMediaEnded() { try { debouncedUpdateMediaState(); } catch(e){ console.error("Content script: Помилка в handleMediaEnded", e, this); } }
@@ -112,8 +113,9 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
               if (this.src || this.querySelector('source[src]')) {
                    trackedMediaElements.add(this);
                    // Перевіряємо, чи слухачі вже додані, щоб уникнути дублювання
+                   // Використовуємо іменовані функції для додавання/видалення
                    if (!this.__listenersAddedByTabSuspender) {
-                       addMediaListenersWithNamedHandlers(this); // Додаємо слухачів з іменованими функціями
+                       addMediaListenersWithNamedHandlers(this); // Додаємо слухачів
                    }
                    debouncedUpdateMediaState();
                }
@@ -127,7 +129,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
          mediaElement.__listenersAddedByTabSuspender = true;
          trackedMediaElements.add(mediaElement); // Додаємо до відстежуваних
 
-         // Додаємо слухачі подій
+         // Додаємо слухачі подій, використовуючи іменовані функції
          mediaElement.addEventListener('play', handleMediaPlay);
          mediaElement.addEventListener('pause', handleMediaPause);
          mediaElement.addEventListener('ended', handleMediaEnded);
@@ -148,10 +150,12 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
       }
 
       // Функція для безпечного видалення слухачів (викликається перед вивантаженням)
+      // Ця функція більше не викликається з unload, але залишається для MutationObserver
       function safeRemoveListeners(mediaElement) {
           if (!mediaElement.__listenersAddedByTabSuspender) return; // Не видаляємо, якщо не додавали
 
           try {
+              // Видаляємо слухачів, використовуючи ті самі іменовані функції
               mediaElement.removeEventListener('play', handleMediaPlay);
               mediaElement.removeEventListener('pause', handleMediaPause);
               mediaElement.removeEventListener('ended', handleMediaEnded);
@@ -162,6 +166,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
               console.warn("Content script: Помилка видалення слухачів медіа елемента", e, mediaElement);
           }
            mediaElement.__listenersAddedByTabSuspender = false; // Скидаємо позначку
+           trackedMediaElements.delete(mediaElement); // Видаляємо з відстежуваних
       }
 
 
@@ -184,7 +189,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
          // console.log(`Content script: Початкове сканування завершено. Знайдено ${trackedMediaElements.size} медіа елементів.`);
     }
 
-     // --- MutationObserver для відстеження динамічно доданих медіа елементів ---
+     // --- MutationObserver для відстеження динамічно доданих/видалених медіа елементів ---
      const observer = new MutationObserver(mutations => {
          let shouldUpdateState = false; // Відстежуємо, чи відбулися зміни, що вимагають оновлення стану
          mutations.forEach(mutation => {
@@ -219,10 +224,18 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
                   mutation.removedNodes.forEach(node => {
                      if (node.nodeType === Node.ELEMENT_NODE) {
                          // Видаляємо слухачів з елементів, які були видалені з DOM
-                         safeRemoveListeners(node);
-                          // Перевіряємо, чи видалений елемент був медіа або містив медіа, щоб зрозуміти, чи потрібно оновити стан
+                         // Перевіряємо, чи видалений елемент був медіа або містив медіа, щоб зрозуміти, чи потрібно оновити стан
                           if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO' || node.querySelector('video, audio')) {
+                              // Якщо сам видалений вузол був медіа
+                              safeRemoveListeners(node);
                               shouldUpdateState = true;
+                          } else {
+                              // Перевіряємо медіа елементи в піддереві видаленого вузла
+                              const nestedMedia = node.querySelectorAll('video, audio');
+                              nestedMedia.forEach(media => {
+                                   safeRemoveListeners(media);
+                                   shouldUpdateState = true;
+                              });
                           }
                      }
                   });
@@ -269,14 +282,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
             // Виконуємо початкове сканування існуючих медіа елементів після налаштування спостерігача
             scanForMediaElements();
 
-             // Відключаємо спостерігача, коли сторінка вивантажується
-             window.addEventListener('unload', () => {
-                 observer.disconnect();
-                 console.log('Content script: MutationObserver зупинено.');
-                  // При вивантаженні сторінки, безпечно видаляємо слухачів з усіх відстежуваних елементів
-                  trackedMediaElements.forEach(media => safeRemoveListeners(media));
-                  trackedMediaElements.clear(); // Очищаємо набір
-             }, { capture: true }); // Використовуємо capture: true для надійнішого перехоплення події вивантаження
+             // *** ВИДАЛЕНО: Слухач події 'unload' ***
+             // window.addEventListener('unload', () => { /* ... cleanup code ... */ }, { capture: true });
 
         } else {
              console.error('Content script: document.body недоступний для запуску MutationObserver.');
@@ -286,7 +293,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && !win
                       observer.observe(document.body, observerConfig);
                       console.log('Content script: MutationObserver запущено на document.body після DOMContentLoaded.');
                        scanForMediaElements();
-                      window.addEventListener('unload', () => { observer.disconnect(); console.log('Content script: MutationObserver зупинено.'); }, { capture: true });
+                       // *** ВИДАЛЕНО: Слухач події 'unload' ***
+                       // window.addEventListener('unload', () => { /* ... cleanup code ... */ }, { capture: true });
                  } else {
                       console.error('Content script: document.body все ще недоступний після DOMContentLoaded.');
                  }
