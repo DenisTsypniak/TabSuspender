@@ -1,12 +1,11 @@
 // utils.js
 
-// Робимо об'єкт з локалізованими текстами доступним глобально після виклику applyLanguage
-let i18nTexts = {}; // Оголошуємо глобально
-
-// Кеш для елементів з атрибутом data-i18n та data-i18n-title
-// Оновлюємо кеш, щоб включати обидва типи атрибутів
+// Глобальний об'єкт для локалізованих текстів
+let i18nTexts = {};
+// Кеш для елементів DOM з атрибутами локалізації
 let i18nElementsCache = null;
 
+// Застосовує мову та оновлює текстовий вміст елементів UI
 function applyLanguage(lang) {
   const texts = {
     uk: {
@@ -14,13 +13,13 @@ function applyLanguage(lang) {
       suspendTitle: "🛑 Вкладка призупинена",
       suspendDescription: "Для економії системних ресурсів цю вкладку було автоматично призупинено.",
       suspendCurrent: "🎯 Призупинити поточну",
-      suspendAll: "🌀 Призупинити всі фонові", // Змінено для точності
+      suspendAll: "🌀 Призупинити всі фонові",
       whitelistUrl: "➕ URL у винятки",
       whitelistDomain: "🌐 Домен у винятки",
       openSettings: "⚙️ Налаштування",
       restoreButton: "🔄 Повернутись",
-      restorePrompt: "Клацніть будь-де, щоб відновити", // Не використовується в поточному JS
-      saveButton: "Зберегти", // Не використовується в поточному JS
+      restorePrompt: "Клацніть будь-де, щоб відновити",
+      saveButton: "Зберегти",
       suspensionLabel: "Призупиняти вкладки після:",
       languageLabel: "Мова:",
       themeLabel: "Тема:",
@@ -29,10 +28,10 @@ function applyLanguage(lang) {
       whitelistUrlsPh: "Наприклад: https://example.com/page",
       whitelistDomainsPh: "наприклад: example.com, google.com",
       settingsSaved: "Налаштування збережено!",
-      optionsTitle: "Налаштування Призузупинення вкладок",
-      warningMessage: "⚠️ Цю сторінку неможливо призузупинити",
-      warningSystemPage: "⚠️ Цю сторінку неможливо призузупинити (системна сторінка)",
-      warningWhitelisted: "⚠️ Цю сторінку неможливо призузупинити (у білому списку)",
+      optionsTitle: "Налаштування Tab Suspender",
+      warningMessage: "⚠️ Цю сторінку неможливо призупинити",
+      warningSystemPage: "⚠️ Цю сторінку неможливо призупинити (системна сторінка)",
+      warningWhitelisted: "⚠️ Цю сторінку неможливо призупинити (у білому списку)",
       clearListButton: "Очистити список",
       timeNever: "Ніколи",
       time1Minute: "1 хвилина",
@@ -44,53 +43,50 @@ function applyLanguage(lang) {
       time1Week: "1 тиждень",
       languageUkrainian: "Українська",
       languageEnglish: "English",
-      languageUkrainianShort: "Укр", // Коротка назва для перемикача
-      languageEnglishShort: "Eng", // Коротка назва для перемикача
+      languageUkrainianShort: "Укр",
+      languageEnglishShort: "Eng",
       themeLight: "Світла",
       themeDark: "Темна",
-      testOption1Label: "Тестова опція 1", // Залишено для прикладу, якщо вони є в налаштуваннях
-      testOption2Label: "Тестова опція 2", // Залишено для прикладу
-      debugTitle: "Адмін-панель відладки",
+      testOption1Label: "Тестова опція 1",
+      testOption2Label: "Тестова опція 2",
+      debugTitle: "Панель відладки",
       debugStatus: "Оновлення даних...",
       debugTabId: "ID вкладки",
       debugTitleCol: "Назва",
       debugUrl: "URL",
-      debugTimeLeft: "Час до призузупинення",
-      debugReason: "Причина", // Коротше
+      debugTimeLeft: "Залишилося часу до призупинення",
+      debugReason: "Статус",
       debugError: "Помилка: не вдалося отримати дані",
       debugUpdated: "Дані оновлено",
       noTitle: "Без назви",
-      openDebugPanel: "🛠️ Адмін-панель відладки",
+      openDebugPanel: "🛠️ Панель відладки",
       backToSettings: "⚙️ Назад до налаштувань",
-      noTabsFound: "Вкладок не знайдено", // Додано для debug панелі
+      noTabsFound: "Вкладок не знайдено",
 
-      // Причини призупинення/непризупинення (для адмін-панелі)
       reasonSystem: "Системна/Розширення",
-      reasonSuspended: "Вже призупинена", // Цей ключ, можливо, більше не потрібен у debug, якщо є suspendedByTimer/Manually
+      reasonSuspended: "Вже призупинена",
       reasonWhitelisted: "У білому списку",
       reasonActive: "Активна вкладка",
-      reasonDisabled: "Призузупинення відключено", // Авто-призупинення відключено
-      reasonBelowThreshold: "Активна нещодавно", // Неактивна, але час не вийшов
-      reasonReady: "Готова до призузупинення", // Неактивна, час вийшов, чекає перевірки таймером
-      reasonUnknown: "Невідома причина", // Неочікуваний стан
-      reasonError: "Помилка перевірки URL", // Не вдалося перевірити URL (наприклад, URL недійсний)
-      reasonSuspendedByTimer: "Призузупинена (таймер)", // Вкладка, призупинена таймером
-      reasonSuspendedManually: "Призузупинена (вручну)", // Вкладка, призупинена вручн
-      deleteItemConfirm: "Видалити цей елемент?", // Додано для підтвердження
-      clearListButtonConfirm: "Очистити весь список?", // Додано для підтвердження
-      preventVideoSuspendLabel: "Не призупиняти, якщо відео на паузі", // Текст для чекбокса
-      reasonVideoPaused: "Відео на паузі (було відтворено)", // Змінено для точності
-      reasonVideoNotPlayed: "Є відео, але не відтворювалося", // ДОДАНО: Нова причина
-      reasonVideoPlaying: "Відео відтворюється", // ДОДАНО
-      reasonVideoPausedOptionOff: "Відео на паузі (опція вимкнена)", // ДОДАНО
+      reasonDisabled: "Призупинення відключено",
+      reasonBelowThreshold: "Нещодавно активна",
+      reasonReady: "Готова до призупинення",
+      reasonUnknown: "Невідомий статус",
+      reasonError: "Помилка перевірки URL",
+      reasonSuspendedByTimer: "Призупинена (за таймером)",
+      reasonSuspendedManually: "Призупинена (вручну)",
+      deleteItemConfirm: "Видалити цей елемент?",
+      clearListButtonConfirm: "Очистити весь список?",
+      preventVideoSuspendLabel: "Не призупиняти, якщо відео на паузі",
+      reasonVideoPaused: "Відео на паузі (відтворювалось)",
+      reasonVideoNotPlayed: "Є відео, але не відтворювалось",
+      reasonVideoPlaying: "Відео відтворюється",
+      reasonVideoPausedOptionOff: "Відео на паузі (опцію вимкнено)",
 
-      // НОВІ ТЕКСТИ ДЛЯ СКРІНШОТІВ
-      enableScreenshotsLabel: "Показувати скріншоти на сторінці призупинення", // Текст для нової опції в налаштуваннях
-      screenshotUnavailable: "Скріншот недоступний", // Повідомлення, коли скріншот відсутній
-      screenshotFetchError: "Помилка завантаження скріншоту", // Повідомлення про помилку при отриманні скріншоту
-      screenshotDisabledSetting: "Скріншоти вимкнено в налаштуваннях", // Повідомлення, коли опція вимкнена
-      reasonScreenshotDisabledSetting: "Скріншоти вимкнено", // Причина для Debug панелі, коли опція вимкнена
-      // ДОДАНО: Текст підказки для опції скріншотів
+      enableScreenshotsLabel: "Показувати скріншоти на сторінці призупинення",
+      screenshotUnavailable: "Скріншот недоступний",
+      screenshotFetchError: "Помилка завантаження скріншоту",
+      screenshotDisabledSetting: "Скріншоти вимкнено в налаштуваннях",
+      reasonScreenshotDisabledSetting: "Скріншоти вимкнено",
       screenshotsTooltip: "На призупиненій вкладці розширення відображатиме скріншот сторінки до її призупинення.\n\nСкріншот сторінки є експериментальною функцією і може призвести до значного навантаження на процесор, а також підвищеного споживання пам'яті.\n\nЯкщо Ви помітили дивну поведінку, наприклад, тривале призупинення вкладки або раптові вильоти Chrome, спробуйте вимкнути цю функцію."
     },
     en: {
@@ -103,8 +99,8 @@ function applyLanguage(lang) {
       whitelistDomain: "🌐 Whitelist Domain",
       openSettings: "⚙️ Settings",
       restoreButton: "🔄 Restore",
-      restorePrompt: "Click anywhere to restore", // Not used in current JS
-      saveButton: "Save", // Not used in current JS
+      restorePrompt: "Click anywhere to restore",
+      saveButton: "Save",
       suspensionLabel: "Suspend tabs after:",
       languageLabel: "Language:",
       themeLabel: "Theme:",
@@ -128,136 +124,106 @@ function applyLanguage(lang) {
       time1Week: "1 week",
       languageUkrainian: "Ukrainian",
       languageEnglish: "English",
-      languageUkrainianShort: "Ukr", // Short name for toggle
-      languageEnglishShort: "Eng", // Short name for toggle
+      languageUkrainianShort: "Ukr",
+      languageEnglishShort: "Eng",
       themeLight: "Light",
       themeDark: "Dark",
-      testOption1Label: "Test Option 1", // Left for example
-      testOption2Label: "Test Option 2", // Left for example
-      debugTitle: "Debug Admin Panel",
+      testOption1Label: "Test Option 1",
+      testOption2Label: "Test Option 2",
+      debugTitle: "Debug Panel",
       debugStatus: "Updating data...",
       debugTabId: "Tab ID",
       debugTitleCol: "Title",
       debugUrl: "URL",
       debugTimeLeft: "Time to suspend",
-      debugReason: "Reason", // Shorter
+      debugReason: "Status",
       debugError: "Error: Failed to retrieve data",
       debugUpdated: "Data updated",
       noTitle: "No title",
-      openDebugPanel: "🛠️ Debug Admin Panel",
+      openDebugPanel: "🛠️ Debug Panel",
       backToSettings: "⚙️ Back to Settings",
-       noTabsFound: "No tabs found", // Added for debug panel
+       noTabsFound: "No tabs found",
 
-      // Reasons for not suspending (for Debug Panel)
       reasonSystem: "System/Extension Page",
-      reasonSuspended: "Already Suspended", // This key might not be needed in debug if suspendedByTimer/Manually exists
+      reasonSuspended: "Already Suspended",
       reasonWhitelisted: "Whitelisted",
       reasonActive: "Active Tab",
-      reasonDisabled: "Suspension Disabled", // Auto-suspension disabled
-      reasonBelowThreshold: "Recently Active", // Inactive, but time not met
-      reasonReady: "Ready for Suspension", // Inactive, time met, waiting for timer check
-      reasonUnknown: "Unknown Reason", // Unexpected state
-      reasonError: "URL Check Error", // Failed to check URL (e.g., invalid URL)
-      reasonSuspendedByTimer: "Suspended (Timer)", // Tab suspended by timer
-      reasonSuspendedManually: "Suspended (Manual)", // Tab suspended manually
-      deleteItemConfirm: "Delete this item?", // Added for confirmation
-      clearListButtonConfirm: "Clear the entire list?", // Added for confirmation
-      preventVideoSuspendLabel: "Prevent suspend if video is paused", // Text for checkbox
-      reasonVideoPaused: "Video paused (after playing)", // Changed for clarity
-      reasonVideoNotPlayed: "Has video, but not played", // ADDED: New reason
-      reasonVideoPlaying: "Video playing", // ADDED
-      reasonVideoPausedOptionOff: "Video paused (option off)", // ADDED
+      reasonDisabled: "Suspension Disabled",
+      reasonBelowThreshold: "Recently Active",
+      reasonReady: "Ready for Suspension",
+      reasonUnknown: "Unknown Status",
+      reasonError: "URL Check Error",
+      reasonSuspendedByTimer: "Suspended (Timer)",
+      reasonSuspendedManually: "Suspended (Manual)",
+      deleteItemConfirm: "Delete this item?",
+      clearListButtonConfirm: "Clear the entire list?",
+      preventVideoSuspendLabel: "Prevent suspend if video is paused",
+      reasonVideoPaused: "Video paused (after playing)",
+      reasonVideoNotPlayed: "Has video, but not played",
+      reasonVideoPlaying: "Video playing",
+      reasonVideoPausedOptionOff: "Video paused (option off)",
 
-      // NEW TEXTS FOR SCREENSHOTS
-      enableScreenshotsLabel: "Show screenshots on suspend page", // Text for new option in settings
-      screenshotUnavailable: "Screenshot unavailable", // Message when screenshot is missing
-      screenshotFetchError: "Error loading screenshot", // Message on error fetching screenshot
-      screenshotDisabledSetting: "Screenshots disabled in settings", // Message when option is disabled
-      reasonScreenshotDisabledSetting: "Screenshots disabled", // Reason for Debug Panel when option is disabled
-      // ДОДАНО: Текст підказки для опції скріншотів
+      enableScreenshotsLabel: "Show screenshots on suspend page",
+      screenshotUnavailable: "Screenshot unavailable",
+      screenshotFetchError: "Error loading screenshot",
+      screenshotDisabledSetting: "Screenshots disabled in settings",
+      reasonScreenshotDisabledSetting: "Screenshots disabled",
       screenshotsTooltip: "On a suspended tab, the extension will display a screenshot of the page before it was suspended.\n\nPage screenshots are an experimental feature and can significantly increase CPU load and memory usage.\n\nIf you notice strange behavior, such as prolonged tab suspension or sudden Chrome crashes, try disabling this feature."
     }
   };
 
-  // Використовуємо uk як резервний варіант
   const t = texts[lang] || texts['uk'];
 
-  // Зберігаємо тексти глобально
   window.i18nTexts = t;
-  window.i18nTexts.language = lang; // Зберігаємо код активної мови
+  window.i18nTexts.language = lang;
 
-  // --- Оптимізація: Кешування елементів UI для локалізації ---
-  // При першому виклику applyLanguage, знаходимо всі елементи з атрибутом data-i18n або data-i18n-title
+  // Кешуємо елементи при першому виклику applyLanguage
   if (i18nElementsCache === null) {
-      // Find elements with data-i18n OR data-i18n-title
       const elementsWithI18n = document.querySelectorAll('[data-i18n], [data-i18n-title]');
-      // Find select option elements with data-i18n separately if needed (handled by the main query now)
-      // const optionElements = document.querySelectorAll('select option[data-i18n]');
-
-      // Combine and unique-ify the list
-      // i18nElementsCache = Array.from(elementsWithI18n).concat(Array.from(optionElements)); // No need to concat separately if query is broad enough
-       i18nElementsCache = Array.from(elementsWithI18n); // The single query should cover all cases now
-
-      // Remove duplicates (just in case an element matches both) - Set handles this
-      i18nElementsCache = Array.from(new Set(i18nElementsCache));
-
-
-      console.log(`Utils: Кешовано ${i18nElementsCache.length} елементів для локалізації.`);
+      i18nElementsCache = Array.from(new Set(elementsWithI18n));
+      console.log(`Utils: Cached ${i18nElementsCache.length} elements for localization.`);
   }
 
-  // Ітеруємося по кешованих елементах
+  // Оновлюємо текстовий вміст та атрибути title для кешованих елементів
   i18nElementsCache.forEach(el => {
-    // Обробка data-i18n для текстового вмісту або placeholder
     const textKey = el.getAttribute('data-i18n');
-    if (textKey && t[textKey]) { // Check if key exists in texts
+    if (textKey && t[textKey]) {
       if (el.tagName === 'INPUT' && el.hasAttribute('placeholder')) {
           el.placeholder = t[textKey];
       } else if (el.tagName === 'OPTION') {
-          // For <option> elements, which might have a value attribute
-          // Update textContent
            el.textContent = t[textKey];
       }
       else {
-          // For most elements, update textContent
           el.textContent = t[textKey];
       }
-    } else if (textKey) {
-        // console.warn(`Utils: i18n text key "${textKey}" not found for language "${lang}"`);
-        // Optionally clear text content if translation is missing
-        // el.textContent = '';
     }
 
-    // Обробка data-i18n-title для атрибута title
     const titleKey = el.getAttribute('data-i18n-title');
-    if (titleKey && t[titleKey]) { // Check if key exists in texts
-        // Set the title attribute with the localized text
+    if (titleKey && t[titleKey]) {
         el.title = t[titleKey];
     } else if (titleKey) {
-         // If the tooltip key is not found, clear the title attribute
          el.title = '';
-         // console.warn(`Utils: i18n title key "${titleKey}" not found for language "${lang}"`);
     }
   });
 }
 
+// Застосовує тему (світла/темна) до body та кореневого елемента HTML
 function applyTheme(theme) {
   document.body.classList.remove('light', 'dark');
   document.body.classList.add(theme);
 
-  // Оновлюємо іконку теми на сторінці призупинення, якщо вона існує
+  // Оновлює іконку теми, якщо вона існує на сторінці (наприклад, на suspend.html)
   const themeIcon = document.getElementById('themeIcon');
   if (themeIcon) {
       themeIcon.textContent = theme === 'dark' ? '🌞' : '🌙';
   }
-
-   // Встановлюємо атрибут data-theme на HTML для специфічності CSS
+   // Встановлює атрибут data-theme для CSS змінних
    document.documentElement.dataset.theme = theme;
 }
 
-// Допоміжна функція для екранування HTML-сутностей
+// Екранує HTML-сутності у рядку
 function escapeHTML(str) {
   if (str === null || str === undefined) return '';
-  // Переконуємося, що str розглядається як рядок перед заміною
   const s = String(str);
   return s.replace(/&/g, '&')
           .replace(/</g, '<')
@@ -266,28 +232,50 @@ function escapeHTML(str) {
           .replace(/'/g, '&apos;');
 }
 
-// Функція для скорочення довгих URL
-// Використовує глобальну функцію escapeHTML
-function shortenUrl(url, maxLength = 80) { // Довжина за замовчуванням 80 символів
+// Скорочує довгий URL для відображення, додаючи "..." посередині
+function shortenUrl(url, maxLength = 80) {
     if (!url) return '';
-    const plainUrl = String(url); // Переконуємося, що це рядок
-    if (plainUrl.length <= maxLength) return window.escapeHTML(plainUrl); // Екрануємо, якщо не скорочено
+    const plainUrl = String(url);
+    if (plainUrl.length <= maxLength) return window.escapeHTML(plainUrl);
 
-    // Скорочуємо, залишаючи початок і кінець URL
     const startLength = Math.floor((maxLength - 3) / 2);
     const endLength = maxLength - 3 - startLength;
     const shortened = plainUrl.substring(0, startLength) + '...' + plainUrl.substring(plainUrl.length - endLength);
-    return window.escapeHTML(shortened); // Екрануємо скорочений рядок для відображення
+    return window.escapeHTML(shortened);
+}
+
+// Надсилає повідомлення до Service Worker з механізмом повторних спроб
+function sendMessageWithRetry(message, callback, retries = 5, delay = 100) {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+        console.error("sendMessageWithRetry: chrome.runtime unavailable.");
+        if (callback) callback(null, new Error("chrome.runtime unavailable"));
+        return;
+    }
+
+    chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+            const error = chrome.runtime.lastError;
+            // Якщо помилка "Receiving end does not exist" (Service Worker неактивний) і залишились спроби
+            if (retries > 0 && error.message.includes("Receiving end does not exist")) {
+                console.warn(`sendMessageWithRetry: Помилка надсилання повідомлення: ${error.message}. Залишилось спроб: ${retries}. Retry in ${delay}ms.`);
+                setTimeout(() => {
+                    sendMessageWithRetry(message, callback, retries - 1, delay * 2);
+                }, delay);
+            } else {
+                console.error("sendMessageWithRetry: Failed to send message after retries.", message, error);
+                if (callback) callback(null, chrome.runtime.lastError);
+            }
+        } else {
+            if (callback) callback(response);
+        }
+    });
 }
 
 
-// Робимо службові функції та тексти доступними глобально для інших скриптів
-window.i18nTexts = window.i18nTexts || {}; // Ініціалізуємо або використовуємо існуюче
+// Робимо службові функції та об'єкт i18nTexts доступними глобально
+window.i18nTexts = window.i18nTexts || {};
 window.applyLanguage = applyLanguage;
 window.applyTheme = applyTheme;
 window.escapeHTML = escapeHTML;
-window.shortenUrl = shortenUrl; // Робимо shortenUrl глобальним
-
-// Примітка: функція loadTheme видалена, оскільки тема застосовується безпосередньо після отримання
-// налаштувань у DOMContentLoaded кожного UI-скрипта.
-// Логіка visibility: hidden / visible обробляється там як останній крок.
+window.shortenUrl = shortenUrl;
+window.sendMessageWithRetry = sendMessageWithRetry;
